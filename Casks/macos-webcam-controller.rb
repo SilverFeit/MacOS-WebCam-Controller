@@ -1,6 +1,6 @@
 cask "macos-webcam-controller" do
-  version "1.1.0"
-  sha256 "5f0e9f31b0dc8e8c147cf74d474a428ba814f9d0b9487fb681388ff77006fb06"
+  version "1.1.1"
+  sha256 "341d9a9c9b735623b659a6293faba37fab45478e54e012952b7fd388f8051dfa"
 
   url "https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/download/v#{version}/MacOS-WebCam-Controller-#{version}.dmg"
   name "MacOS WebCam Controller"

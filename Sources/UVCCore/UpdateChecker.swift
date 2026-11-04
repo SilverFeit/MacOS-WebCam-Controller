@@ -83,7 +83,7 @@ public struct SemanticVersion: Comparable, Equatable, Sendable, CustomStringConv
 }
 
 public enum AppBuildInfo {
-    public static let fallbackVersion = "1.1.0"
+    public static let fallbackVersion = "1.1.1"
     public static let bundleIdentifier = "com.webcamcontroller.uvc"
     public static let githubOwner = "SilverFeit"
     public static let githubRepo = "MacOS-WebCam-Controller"

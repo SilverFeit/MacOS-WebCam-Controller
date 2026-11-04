@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, Verify & Publish Release
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify git tag matches VERSION file
+        run: |
+          EXPECTED="v$(tr -d '[:space:]' < VERSION)"
+          if [[ "${EXPECTED}" != "${GITHUB_REF_NAME}" ]]; then
+            echo "Mismatch: VERSION file has ${EXPECTED}, tag is ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+      - name: Run UVCCore unit tests
+        run: swift run UVCCoreTests
+
+      - name: Package Release (.dmg, .app.zip & SHA256SUMS.txt)
+        run: ./Scripts/package_release.sh
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VER="$(tr -d '[:space:]' < VERSION)"
+          awk -v v="${VER}" 'index($0, "## [" v "]") == 1 {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > release_notes.md
+          cat >> release_notes.md << 'EOF'
+
+          ## Install / Upgrade via Homebrew
+
+          ```bash
+          brew install --cask SilverFeit/tap/macos-webcam-controller
+          brew upgrade --cask macos-webcam-controller
+          ```
+          EOF
+
+      - name: Publish GitHub Release if not already created
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              dist/release/MacOS-WebCam-Controller-*.dmg \
+              dist/release/MacOS-WebCam-Controller-*.app.zip \
+              dist/release/SHA256SUMS.txt \
+              --title "MacOS WebCam Controller ${GITHUB_REF_NAME}" \
+              --notes-file release_notes.md \
+              --latest
+          fi

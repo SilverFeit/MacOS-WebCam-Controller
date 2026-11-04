@@ -4,6 +4,14 @@ All notable changes to **MacOS WebCam Controller** are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-11-04
+
+### Added
+- **Logarithmic EV-Stop Exposure Time Slider (`log2`Stops)**: Manual shutter tuning in `Basic` and the Menu Bar popover now scales smoothly in photographic EV stops (`1/1000s` → `1/250s` → `1/125s` → `1/60s` → `1/30s`) instead of compressing fast shutter speeds into the left edge of a linear `100 µs` range.
+- **One-Click Floating Stream HUD Button in Menu Bar (`pip`)**: Toggle or bring back a dismissed floating call stats overlay directly from the Menu Bar header.
+- **16:9 Aspect-Ratio Priority in Slow-Mode (`5 fps`) Call Auto-Fix**: Prefers `1920×1080` → `1280×720` → `2560×1440` widescreen modes (`>= 24 fps`) when upgrading sluggish `<= 10 fps` call streams.
+- **Automated Tag Release Workflow, Camera Issue Form & Contributor Guide**: Added `.github/workflows/release.yml`, `.github/ISSUE_TEMPLATE/bug_report.yml`, and `CONTRIBUTING.md`.
+
 ## [1.1.0] - 2026-11-04
 
 ### Added

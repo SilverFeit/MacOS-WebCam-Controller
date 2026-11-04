@@ -55,6 +55,27 @@ public struct MenuBarPopoverView: View {
                 }
 
                 Button {
+                    if manager.shouldDisplayFloatingOverlay {
+                        manager.isOverlayDismissedForSession = true
+                        if manager.streamOverlayMode == .always {
+                            manager.streamOverlayMode = .off
+                        }
+                    } else {
+                        manager.isOverlayDismissedForSession = false
+                        if manager.streamOverlayMode == .off {
+                            manager.streamOverlayMode = manager.isSelectedCameraInCall ? .whileInCall : .always
+                        }
+                    }
+                } label: {
+                    Image(systemName: manager.shouldDisplayFloatingOverlay ? "pip.fill" : "pip")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(manager.shouldDisplayFloatingOverlay ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Toggle floating Stream Stats HUD overlay")
+
+                Button {
                     manager.isHardwareLockEnabled.toggle()
                 } label: {
                     Image(systemName: manager.isHardwareLockEnabled ? "lock.fill" : "lock.open")

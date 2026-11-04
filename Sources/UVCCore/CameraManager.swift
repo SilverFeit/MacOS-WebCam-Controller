@@ -517,13 +517,26 @@ public final class CameraManager: ObservableObject {
                (cam.selectedStream?.fps ?? 30) > 10 {
                 slowModeFixAttemptsInSession += 1
                 let previousSummary = "\(live.width)×\(live.height) @ \(live.fps) fps"
-                if let smoothTarget = UVCStreamValidator.validateSelection(
+                let preferred16x9Candidates: [(Int, Int)] = [(1920, 1080), (1280, 720), (2560, 1440)]
+                let chosenTarget = preferred16x9Candidates.lazy.compactMap { (w, h) -> UVCStreamSelection? in
+                    guard let sel = UVCStreamValidator.validateSelection(
+                        modes: cam.streamModes,
+                        desiredCodec: .mjpeg,
+                        desiredWidth: w,
+                        desiredHeight: h,
+                        desiredFPS: 30
+                    ), sel.width == w, sel.height == h, sel.fps >= 24 else {
+                        return nil
+                    }
+                    return sel
+                }.first ?? UVCStreamValidator.validateSelection(
                     modes: cam.streamModes,
                     desiredCodec: .mjpeg,
                     desiredWidth: 1920,
                     desiredHeight: 1080,
                     desiredFPS: 30
-                ), smoothTarget.fps >= 24, cam.applyStreamSelection(smoothTarget) {
+                )
+                if let smoothTarget = chosenTarget, smoothTarget.fps >= 24, cam.applyStreamSelection(smoothTarget) {
                     upgradedSlowModeFrom = previousSummary
                     statusMessage = "Auto-fixed slow stream (\(previousSummary) -> \(smoothTarget.width)×\(smoothTarget.height)@\(smoothTarget.fps)fps)"
                     DiagnosticsLogger.note(statusMessage)

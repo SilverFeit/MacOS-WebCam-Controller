@@ -46,7 +46,7 @@ On Windows, operating system APIs (`DirectShow` / `IAMCameraControl`) expose eve
 - **100% Hardware Real (Sin Cámaras Virtuales ni Permisos):** En Zoom, Meet, Teams, OBS, WhatsApp o FaceTime sigues eligiendo el nombre real de tu cámara USB. La app inyecta paquetes UVC (`SET_CUR`, `GET_CUR`, `GET_DEF`) por **Endpoint 0** mediante `IOKit` sin pedir permisos de Cámara/Micrófono y con `0%` de carga de recodificación de video.
 - **Control Total + Obturación Fotográfica (`1/60s`):** Exposición manual, velocidad de obturación en formato fotográfico (`1/60s`, `1/50s`), ganancia/ISO, temperatura en Kelvin, brillo, contraste, matiz, saturación, nitidez, gamma, filtro anti-parpadeo (`50 Hz / 60 Hz`) con protección contra bloqueos UVC `< 1.5`, contraluz, enfoque y PTZ (`1.3×` Zoom, Pan, Tilt).
 - **Resoluciones (2K / 4K / 1080p), FPS Validados y Auto-Fix de Llamadas a `5 fps`:** Valida combinaciones reales `(Formato, Resolución, FPS)` desde los descriptores USB y mejora automáticamente llamadas lentas (`<= 10 fps`, como WhatsApp) a `1080p @ 30 fps`.
-- **HUD Flotante, CLI `webcamctl` y Versionamiento inferior con GitHub:** Incluye HUD flotante opcional durante llamadas, control total por terminal (`webcamctl set shutter=1/60 kelvin=4500`, `webcamctl stream 2k 30`, `webcamctl who`) y barra inferior con la versión actual (`v1.1.0 · GitHub ↗`) y aviso automático cuando hay una actualización disponible en GitHub Releases.
+- **HUD Flotante, CLI `webcamctl` y Versionamiento inferior con GitHub:** Incluye HUD flotante opcional durante llamadas, control total por terminal (`webcamctl set shutter=1/60 kelvin=4500`, `webcamctl stream 2k 30`, `webcamctl who`) y barra inferior con la versión actual (`v1.1.1 · GitHub ↗`) y aviso automático cuando hay una actualización disponible en GitHub Releases.
 
 </details>
 
@@ -75,7 +75,7 @@ On Windows, operating system APIs (`DirectShow` / `IAMCameraControl`) expose eve
 ### 1. Instant Menu Bar Control + Standalone Settings Panel + Bottom GitHub Version Bar
 - **Left-click** the webcam icon in the macOS Menu Bar to adjust primary exposure, photographic shutter (`1/60s`), color, and white-balance sliders on the fly during a call.
 - **Right-click** the Menu Bar icon (or click **Advanced…** / **Panel**) to open the full **Webcam Settings Panel** (`Basic`, `Advanced`, and `Preferences` tabs), with optional **Pin on Top** so it floats above OBS, Zoom, or Photo Booth.
-- **Live Version & Update Badge at the Bottom:** Both the Menu Bar popover and Settings Panel display your installed version (`v1.1.0 · GitHub ↗`) at the bottom. When a newer release is published on GitHub, the badge highlights as **`⬆ Update vX.Y.Z · GitHub ↗`** for one-click access to the latest release.
+- **Live Version & Update Badge at the Bottom:** Both the Menu Bar popover and Settings Panel display your installed version (`v1.1.1 · GitHub ↗`) at the bottom. When a newer release is published on GitHub, the badge highlights as **`⬆ Update vX.Y.Z · GitHub ↗`** for one-click access to the latest release.
 
 ### 2. Full Sensor, ISP & Optical Control (`Basic` & `Advanced`)
 - **Exposure & Photographic Shutter (`1/60s`):** Switch between hardware-supported `Manual`, `Auto`, `Shutter Priority`, and `Aperture Priority` modes; dial in exact physical **Exposure Time** displayed in standard shutter fractions (`1/60s`, `1/50s`, `1/30s`) and sensor **Gain**.
@@ -120,7 +120,7 @@ brew upgrade --cask macos-webcam-controller
 ### Option B — Download Prebuilt `.dmg` / `.zip`
 
 1. Go to [**GitHub Releases (`latest`)**](https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/latest).
-2. Download **`MacOS-WebCam-Controller-1.1.0.dmg`** *(or `MacOS-WebCam-Controller-1.1.0.app.zip`)*.
+2. Download **`MacOS-WebCam-Controller-1.1.1.dmg`** *(or `MacOS-WebCam-Controller-1.1.1.app.zip`)*.
 3. Open the `.dmg`, drag **WebCam Controller** into **Applications**, and launch it.
 
 > [!NOTE]

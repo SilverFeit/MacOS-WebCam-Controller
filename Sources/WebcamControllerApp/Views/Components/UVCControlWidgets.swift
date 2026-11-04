@@ -171,6 +171,7 @@ public struct PanelSliderRow<LeftIcon: View, RightIcon: View>: View {
     let labelWidth: CGFloat
     let state: NumericRangeControlState
     let isLockedByAuto: Bool
+    let logarithmicScale: Bool
     let formattedValue: String?
     let leftIcon: LeftIcon
     let rightIcon: RightIcon
@@ -181,6 +182,7 @@ public struct PanelSliderRow<LeftIcon: View, RightIcon: View>: View {
         labelWidth: CGFloat = 104,
         state: NumericRangeControlState,
         isLockedByAuto: Bool = false,
+        logarithmicScale: Bool = false,
         formattedValue: String? = nil,
         @ViewBuilder leftIcon: () -> LeftIcon,
         @ViewBuilder rightIcon: () -> RightIcon,
@@ -190,6 +192,7 @@ public struct PanelSliderRow<LeftIcon: View, RightIcon: View>: View {
         self.labelWidth = labelWidth
         self.state = state
         self.isLockedByAuto = isLockedByAuto
+        self.logarithmicScale = logarithmicScale
         self.formattedValue = formattedValue
         self.leftIcon = leftIcon()
         self.rightIcon = rightIcon()
@@ -200,22 +203,34 @@ public struct PanelSliderRow<LeftIcon: View, RightIcon: View>: View {
         state.isSupported && state.canSet && !isLockedByAuto && state.maximum > state.minimum
     }
 
+    private var useLogStops: Bool {
+        logarithmicScale && state.isSupported && state.minimum >= 1 && state.maximum > state.minimum
+    }
+
     private var sliderMin: Double {
-        state.isSupported && state.maximum > state.minimum ? Double(state.minimum) : 0
+        guard state.isSupported && state.maximum > state.minimum else { return 0 }
+        return useLogStops ? Foundation.log2(Double(max(1, state.minimum))) : Double(state.minimum)
     }
 
     private var sliderMax: Double {
-        state.isSupported && state.maximum > state.minimum ? Double(state.maximum) : 100
+        guard state.isSupported && state.maximum > state.minimum else { return 100 }
+        return useLogStops ? Foundation.log2(Double(max(2, state.maximum))) : Double(state.maximum)
     }
 
     private var sliderBinding: Binding<Double> {
         Binding<Double>(
             get: {
                 guard state.isSupported else { return 0 }
-                return Double(min(max(state.current, state.minimum), max(state.minimum + 1, state.maximum)))
+                let clamped = min(max(state.current, state.minimum), max(state.minimum + 1, state.maximum))
+                return useLogStops ? Foundation.log2(Double(max(1, clamped))) : Double(clamped)
             },
             set: { newVal in
-                onChange(Int(newVal.rounded()))
+                if useLogStops {
+                    let raw = Int(Foundation.pow(2.0, newVal).rounded())
+                    onChange(state.clampedAndSnapped(raw))
+                } else {
+                    onChange(Int(newVal.rounded()))
+                }
             }
         )
     }

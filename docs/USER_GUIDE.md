@@ -4,7 +4,7 @@
 
 # MacOS WebCam Controller — User Guide
 
-**Version 1.1.0 · Direct USB UVC Hardware Control + `webcamctl` CLI for Apple Silicon Macs**
+**Version 1.1.1 · Direct USB UVC Hardware Control + `webcamctl` CLI for Apple Silicon Macs**
 
 </div>
 
@@ -38,7 +38,7 @@ brew upgrade --cask macos-webcam-controller
 
 ### Option 2 — Direct `.dmg` or `.zip` Download
 
-1. Download `MacOS-WebCam-Controller-1.1.0.dmg` from [GitHub Releases](https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/latest).
+1. Download `MacOS-WebCam-Controller-1.1.1.dmg` from [GitHub Releases](https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/latest).
 2. Open the disk image and drag **WebCam Controller** onto **Applications**.
 3. On first launch of a manual download, Control-click **WebCam Controller.app** → **Open** → **Open** (or run `xattr -dr com.apple.quarantine "/Applications/WebCam Controller.app"`).
 4. Optional — symlink the bundled CLI into `/opt/homebrew/bin`:
@@ -54,7 +54,7 @@ At the bottom of **both** the Menu Bar popover and **Webcam Settings Panel**, th
 
 - **Live Status / Active Call Telemetry:** Shows current status when idle, or **`Live: <App> · <Width>×<Height>@<FPS>fps (<Duration>)`** with a green indicator while an app is streaming from the webcam.
 - **`Locked` Indicator:** Appears whenever the Anti-Reset Hardware Lock is enabled.
-- **Version & GitHub Redirect (`v1.1.0 · GitHub ↗`):** Click to open the official GitHub Releases page, or click the adjacent refresh icon (`↻`) to check for updates immediately.
+- **Version & GitHub Redirect (`v1.1.1 · GitHub ↗`):** Click to open the official GitHub Releases page, or click the adjacent refresh icon (`↻`) to check for updates immediately.
 - **Automatic Update Pill (`⬆ Update vX.Y.Z · GitHub ↗`):** Highlights automatically when a newer release is published on GitHub.
 
 ## Tabs Overview
