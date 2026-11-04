@@ -7,16 +7,25 @@ cask "macos-webcam-controller" do
   desc "Direct USB UVC hardware webcam controller for macOS Menu Bar and CLI (webcamctl)"
   homepage "https://github.com/SilverFeit/MacOS-WebCam-Controller"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
   depends_on arch: :arm64
 
   app "WebCam Controller.app"
   binary "#{appdir}/WebCam Controller.app/Contents/MacOS/webcamctl"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/WebCam Controller.app"],
-                   sudo: false
+  if respond_to?(:postflight_steps)
+    postflight_steps do
+      run "/usr/bin/xattr",
+          args: ["-cr", "{{appdir}}/WebCam Controller.app"],
+          writable_paths: ["WebCam Controller.app"],
+          writable_base: :appdir
+    end
+  else
+    postflight do
+      system_command "/usr/bin/xattr",
+                     args: ["-cr", "#{appdir}/WebCam Controller.app"],
+                     sudo: false
+    end
   end
 
   zap trash: [
