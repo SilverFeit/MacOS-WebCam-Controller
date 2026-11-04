@@ -187,6 +187,15 @@ public final class CameraManager: ObservableObject {
         statusMessage = "Pinned USB ID: \(cam.identity.persistentID)"
     }
 
+    public func loadDocumentationShowcaseCamera() {
+        let showcase = UVCCameraDevice.makeDocumentationShowcaseDevice()
+        cameras = [showcase]
+        configuredCameraID = showcase.identity.persistentID
+        selectedCameraRuntimeID = showcase.identity.runtimeID
+        bindSelectedCamera()
+        statusMessage = "Direct Endpoint 0 UVC active · 0% video CPU overhead"
+    }
+
     private func bindSelectedCamera() {
         deviceCancellable?.cancel()
         guard let cam = selectedCamera else {

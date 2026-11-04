@@ -69,6 +69,111 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
         refreshAllFromHardware(syncLockedTarget: true)
     }
 
+    private init(showcaseIdentity: CameraIdentity) {
+        self.identity = showcaseIdentity
+        self.handle = nil
+    }
+
+    /// Deterministic offline UVC capability profile used exclusively by `--render-docs-assets`
+    /// so UI screenshots can be regenerated cleanly even when no physical camera is attached.
+    public static func makeDocumentationShowcaseDevice() -> UVCCameraDevice {
+        let ident = CameraIdentity(
+            vendorId: 0x041e,
+            productId: 0x40a3,
+            locationId: 0x00110000,
+            uvcVersionBCD: 0x0150,
+            videoControlInterfaceNumber: 0,
+            cameraTerminalId: 1,
+            processingUnitId: 2,
+            productName: "Pro UVC 2K Studio Webcam",
+            vendorName: "USB Video Class Hardware",
+            serialNumber: "UVC-2K-001"
+        )
+        let dev = UVCCameraDevice(showcaseIdentity: ident)
+
+        dev.autoExposureMode = AutoExposureModeState(
+            isSupported: true,
+            canSet: true,
+            supportedBitmask: 15,
+            defaultMode: .aperturePriority,
+            current: .manual
+        )
+        dev.autoExposurePriority = BooleanControlState(isSupported: true, canSet: true, defaultValue: true, current: false)
+        dev.exposureTime = NumericRangeControlState(isSupported: true, canSet: true, minimum: 1, maximum: 2500, step: 1, defaultValue: 156, current: 166)
+        dev.gain = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 100, step: 1, defaultValue: 0, current: 18)
+
+        dev.brightness = NumericRangeControlState(isSupported: true, canSet: true, minimum: -64, maximum: 64, step: 1, defaultValue: 0, current: 8)
+        dev.contrast = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 100, step: 1, defaultValue: 50, current: 58)
+        dev.hue = NumericRangeControlState(isSupported: true, canSet: true, minimum: -40, maximum: 40, step: 1, defaultValue: 0, current: 0)
+        dev.saturation = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 128, step: 1, defaultValue: 64, current: 72)
+        dev.sharpness = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 10, step: 1, defaultValue: 4, current: 5)
+        dev.gamma = NumericRangeControlState(isSupported: true, canSet: true, minimum: 72, maximum: 300, step: 1, defaultValue: 100, current: 100)
+
+        dev.whiteBalanceAuto = BooleanControlState(isSupported: true, canSet: true, defaultValue: true, current: false)
+        dev.whiteBalanceTemperature = NumericRangeControlState(isSupported: true, canSet: true, minimum: 2800, maximum: 6500, step: 10, defaultValue: 4600, current: 4450)
+
+        dev.powerLineFrequency = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 3, step: 1, defaultValue: 1, current: 2)
+        dev.backlightCompensation = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 8, step: 1, defaultValue: 0, current: 4)
+        dev.focusAuto = BooleanControlState(isSupported: true, canSet: true, defaultValue: true, current: false)
+        dev.focusAbsolute = NumericRangeControlState(isSupported: true, canSet: true, minimum: 0, maximum: 250, step: 5, defaultValue: 100, current: 85)
+        dev.zoomAbsolute = NumericRangeControlState(isSupported: true, canSet: true, minimum: 100, maximum: 400, step: 10, defaultValue: 100, current: 130)
+        dev.panAbsolute = NumericRangeControlState(isSupported: true, canSet: true, minimum: -36000, maximum: 36000, step: 3600, defaultValue: 0, current: 7200)
+        dev.tiltAbsolute = NumericRangeControlState(isSupported: true, canSet: true, minimum: -36000, maximum: 36000, step: 3600, defaultValue: 0, current: -3600)
+
+        let modes: [UVCStreamResolutionMode] = [
+            UVCStreamResolutionMode(
+                formatIndex: 1,
+                frameIndex: 2,
+                codec: .mjpeg,
+                width: 2560,
+                height: 1440,
+                defaultFPS: 30,
+                supportedFPS: [10, 15, 24, 30].map { UVCFrameRateOption(fps: $0) }
+            ),
+            UVCStreamResolutionMode(
+                formatIndex: 1,
+                frameIndex: 1,
+                codec: .mjpeg,
+                width: 1920,
+                height: 1080,
+                defaultFPS: 30,
+                supportedFPS: [10, 15, 24, 30, 60].map { UVCFrameRateOption(fps: $0) }
+            ),
+            UVCStreamResolutionMode(
+                formatIndex: 1,
+                frameIndex: 3,
+                codec: .mjpeg,
+                width: 1280,
+                height: 720,
+                defaultFPS: 30,
+                supportedFPS: [15, 24, 30, 60].map { UVCFrameRateOption(fps: $0) }
+            ),
+            UVCStreamResolutionMode(
+                formatIndex: 2,
+                frameIndex: 1,
+                codec: .uncompressed,
+                width: 2560,
+                height: 1440,
+                defaultFPS: 5,
+                supportedFPS: [5, 10].map { UVCFrameRateOption(fps: $0) }
+            )
+        ]
+        dev.streamModes = modes
+        dev.defaultStream = UVCStreamValidator.defaultSelection(in: modes)
+        dev.selectedStream = UVCStreamValidator.validateSelection(
+            modes: modes,
+            desiredCodec: .mjpeg,
+            desiredWidth: 2560,
+            desiredHeight: 1440,
+            desiredFPS: 30
+        )
+        dev.liveHardwareStream = dev.selectedStream
+        dev.isHardwareStreamingActive = true
+        dev.streamStatusNote = "Active USB stream: 2560×1440 @ 30 fps (MJPEG)"
+        dev.lockedTargetSnapshot = dev.captureSnapshot()
+        return dev
+    }
+
     public func disconnect() {
         if let h = handle {
             cuvc_close_device(h)

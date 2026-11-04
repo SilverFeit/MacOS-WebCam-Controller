@@ -1,8 +1,18 @@
-# MacOS WebCam Controller User Guide
+<div align="center">
 
-Version 1.0.
+<img src="assets/app-icon.png" alt="MacOS WebCam Controller Icon" width="88" height="88" />
 
-MacOS WebCam Controller changes the hardware settings of an external USB webcam from the macOS menu bar and from a window titled **Webcam Settings Panel**. The app does not display a live preview and does not record microphone audio. Adjust a control here, and the webcam uses that setting for whatever is already showing the camera picture.
+# MacOS WebCam Controller — User Guide
+
+**Version 1.0 · Direct USB UVC Hardware Control for Apple Silicon Macs**
+
+</div>
+
+MacOS WebCam Controller changes the physical hardware settings of an external USB webcam directly from the macOS menu bar and from a standalone window titled **Webcam Settings Panel**. The app does not display a live preview and does not record microphone audio. Adjust a control here, and the webcam applies that register directly inside its sensor/ISP for whatever app is already displaying your camera picture.
+
+<p align="center">
+  <img src="assets/panel-basic-advanced.png" alt="Basic and Advanced Tabs" width="100%" />
+</p>
 
 ## Requirements
 

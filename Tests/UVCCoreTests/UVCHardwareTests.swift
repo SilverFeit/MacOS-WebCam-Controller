@@ -9,6 +9,10 @@ struct TestFailure: Error, CustomStringConvertible {
     }
 }
 
+struct TestSkipped: Error {
+    let reason: String
+}
+
 func expect(_ condition: @autoclosure () -> Bool, _ message: String = "Assertion failed", file: StaticString = #fileID, line: UInt = #line) throws {
     if !condition() {
         throw TestFailure(message, file: file, line: line)
@@ -31,6 +35,7 @@ struct UVCHardwareTestSuite {
         print("===============================================================")
 
         var passed = 0
+        var skipped = 0
         var failed = 0
 
         func runTest(_ name: String, block: @MainActor () throws -> Void) {
@@ -38,6 +43,9 @@ struct UVCHardwareTestSuite {
                 try block()
                 passed += 1
                 print("  [PASS] \(name)")
+            } catch let skip as TestSkipped {
+                skipped += 1
+                print("  [SKIP] \(name) — \(skip.reason)")
             } catch {
                 failed += 1
                 print("  [FAIL] \(name)\n         -> \(error)")
@@ -157,8 +165,9 @@ struct UVCHardwareTestSuite {
             let manager = CameraManager(defaults: testDefaults, enableHotplugWatcher: false)
             defer { manager.shutdown() }
 
-            try expect(!manager.cameras.isEmpty, "Expected at least 1 connected USB UVC webcam")
-            let cam = manager.selectedCamera!
+            guard let cam = manager.selectedCamera else {
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
+            }
             try expect(cam.identity.vendorId != 0, "Non-zero USB Vendor ID")
             try expect(cam.identity.productId != 0, "Non-zero USB Product ID")
             try expect(cam.brightness.isSupported, "Brightness supported")
@@ -176,7 +185,7 @@ struct UVCHardwareTestSuite {
             defer { manager.shutdown() }
 
             guard let camera = manager.selectedCamera else {
-                throw TestFailure("No USB UVC camera connected")
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
             }
             let id = camera.identity
             let originalSnapshot = camera.captureSnapshot()
@@ -237,7 +246,7 @@ struct UVCHardwareTestSuite {
             defer { manager.shutdown() }
 
             guard let camera = manager.selectedCamera else {
-                throw TestFailure("No USB UVC camera connected")
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
             }
             let id = camera.identity
             let originalSnapshot = camera.captureSnapshot()
@@ -349,7 +358,7 @@ struct UVCHardwareTestSuite {
             defer { manager.shutdown() }
 
             guard let camera = manager.selectedCamera else {
-                throw TestFailure("No USB UVC camera connected")
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
             }
             let originalSnapshot = camera.captureSnapshot()
             defer { camera.applySnapshot(originalSnapshot) }
@@ -391,7 +400,7 @@ struct UVCHardwareTestSuite {
             defer { manager.shutdown() }
 
             guard let camera = manager.selectedCamera else {
-                throw TestFailure("No USB UVC camera connected")
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
             }
             let originalSnapshot = camera.captureSnapshot()
             defer { camera.applySnapshot(originalSnapshot) }
@@ -413,7 +422,7 @@ struct UVCHardwareTestSuite {
         }
 
         print("---------------------------------------------------------------")
-        print(" Summary: \(passed) passed, \(failed) failed")
+        print(" Summary: \(passed) passed, \(skipped) skipped, \(failed) failed")
         print("===============================================================")
         if failed > 0 {
             exit(1)

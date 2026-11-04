@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 420" width="1080" height="420">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#090d16"/>
+    </linearGradient>
+    <linearGradient id="camGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="blueCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c4a6e" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#1e3a8a" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="emeraldCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.60"/>
+      <stop offset="100%" stop-color="#0f766e" stop-opacity="0.35"/>
+    </linearGradient>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1080" height="420" rx="18" fill="url(#bgGrad)" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <text x="540" y="38" text-anchor="middle" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="18" font-weight="700">
+    Direct USB UVC Hardware Architecture — Zero Virtual Cameras · 0% Video CPU Overhead
+  </text>
+  <text x="540" y="60" text-anchor="middle" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="12.5">
+    Standard UVC separates high-bandwidth video frames from low-level hardware register commands inside the same physical USB cable
+  </text>
+
+  <!-- Left Node: Physical USB Webcam -->
+  <rect x="36" y="92" width="278" height="292" rx="14" fill="url(#camGrad)" stroke="#475569" stroke-width="1.5"/>
+  <circle cx="175" cy="140" r="26" fill="#0ea5e9" fill-opacity="0.18" stroke="#38bdf8" stroke-width="1.8"/>
+  <circle cx="175" cy="140" r="11" fill="#38bdf8"/>
+  <circle cx="170" cy="135" r="3.5" fill="#ffffff" fill-opacity="0.85"/>
+  <text x="175" y="186" text-anchor="middle" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15.5" font-weight="700">
+    External USB UVC Webcam
+  </text>
+  <text x="175" y="205" text-anchor="middle" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">
+    Class 0x0E (CC_VIDEO)
+  </text>
+
+  <!-- Camera Internal Units -->
+  <rect x="56" y="222" width="238" height="68" rx="9" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="175" y="243" text-anchor="middle" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12.5" font-weight="600">
+    Camera Terminal (CT) &amp; ISP (PU)
+  </text>
+  <text x="175" y="261" text-anchor="middle" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11">
+    Shutter · Gain · Kelvin · Brightness
+  </text>
+  <text x="175" y="277" text-anchor="middle" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11">
+    Contrast · Gamma · Anti-Flicker · PTZ
+  </text>
+
+  <rect x="56" y="300" width="238" height="66" rx="9" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="175" y="322" text-anchor="middle" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12.5" font-weight="600">
+    VideoStreaming Engine (VS)
+  </text>
+  <text x="175" y="340" text-anchor="middle" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11">
+    MJPEG / YUY2 / H.264 Hardware Encoder
+  </text>
+  <text x="175" y="356" text-anchor="middle" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5">
+    4K · 2K QHD · 1080p · Validated FPS
+  </text>
+
+  <!-- Upper Channel: Endpoint 0 Direct Control -->
+  <path d="M 556 164 L 324 164" stroke="#34d399" stroke-width="2.6" marker-end="url(#arrowGreen)"/>
+  <path d="M 324 182 L 556 182" stroke="#34d399" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrowGreen)"/>
+  <rect x="348" y="122" width="186" height="32" rx="7" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+  <text x="441" y="142" text-anchor="middle" fill="#a7f3d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="600">
+    USB Endpoint 0 (Non-Exclusive)
+  </text>
+  <text x="441" y="201" text-anchor="middle" fill="#6ee7b7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5">
+    SET_CUR / GET_CUR / GET_DEF
+  </text>
+
+  <!-- Upper Right Card: MacOS WebCam Controller -->
+  <rect x="566" y="92" width="478" height="136" rx="14" fill="url(#emeraldCard)" stroke="#10b981" stroke-width="1.6"/>
+  <text x="590" y="122" fill="#ecfdf5" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15.5" font-weight="700">
+    MacOS WebCam Controller (Menu Bar + Settings Panel)
+  </text>
+  <text x="590" y="144" fill="#a7f3d0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">
+    IOKit (IOUSBLib) · SC_VIDEOCONTROL (0x01) + VS_PROBE/COMMIT
+  </text>
+  <text x="590" y="168" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Injects 2–26 byte hardware register commands directly into sensor &amp; ISP
+  </text>
+  <text x="590" y="188" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Never opens video/audio streams — requires zero Camera or Mic permissions
+  </text>
+  <text x="590" y="208" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Anti-Reset Lock restores custom exposure &amp; Kelvin if video apps reset camera
+  </text>
+
+  <!-- Lower Channel: High-Speed Video Streaming -->
+  <path d="M 314 332 L 556 332" stroke="#38bdf8" stroke-width="3.2" marker-end="url(#arrowBlue)"/>
+  <rect x="344" y="294" width="194" height="28" rx="7" fill="#0c4a6e" stroke="#38bdf8" stroke-width="1"/>
+  <text x="441" y="312" text-anchor="middle" fill="#bae6fd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="600">
+    Isochronous Video Pipe
+  </text>
+  <text x="441" y="352" text-anchor="middle" fill="#7dd3fc" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10.5">
+    Native un-reencoded frames · 0 ms lag
+  </text>
+
+  <!-- Lower Right Card: Native Video Apps -->
+  <rect x="566" y="254" width="478" height="130" rx="14" fill="url(#blueCard)" stroke="#38bdf8" stroke-width="1.4"/>
+  <text x="590" y="284" fill="#f0f9ff" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="15.5" font-weight="700">
+    macOS UVCAssistant / AVFoundation → Your Video Apps
+  </text>
+  <text x="590" y="307" fill="#bae6fd" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12.5" font-weight="600">
+    Zoom · OBS Studio · Microsoft Teams · Google Meet · FaceTime · Browsers
+  </text>
+  <text x="590" y="331" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Select your real USB webcam name directly (no "Virtual Camera" layer)
+  </text>
+  <text x="590" y="351" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Receives optically corrected exposure, white balance &amp; tone directly from sensor
+  </text>
+  <text x="590" y="371" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12">
+    • Zero software filter CPU/GPU drain and zero battery penalty during long calls
+  </text>
+</svg>

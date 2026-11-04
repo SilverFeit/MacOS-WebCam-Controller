@@ -23,22 +23,25 @@ func renderWebcamAppIcon(size: Int) -> NSBitmapImageRep? {
     let cg = nsCtx.cgContext
 
     let s = CGFloat(size)
-    let pad = s * 0.09
+    let pad = s * 0.08
     let bgRect = CGRect(x: pad, y: pad, width: s - 2 * pad, height: s - 2 * pad)
-    let cornerRadius = (s - 2 * pad) * 0.225
+    let cornerRadius = (s - 2 * pad) * 0.228
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-    // 1. macOS squircle background gradient (deep slate -> midnight blue)
-    cg.saveGState()
+    // 1. macOS Squircle Base with Deep Space Indigo -> Carbon Gradient
     let bgPath = CGPath(roundedRect: bgRect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    cg.saveGState()
     cg.addPath(bgPath)
     cg.clip()
 
-    let colorSpace = CGColorSpaceCreateDeviceRGB()
-    let bgColors = [
-        CGColor(red: 0.16, green: 0.19, blue: 0.26, alpha: 1.0),
-        CGColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1.0)
-    ] as CFArray
-    if let bgGrad = CGGradient(colorsSpace: colorSpace, colors: bgColors, locations: [0.0, 1.0]) {
+    if let bgGrad = CGGradient(
+        colorsSpace: colorSpace,
+        colors: [
+            CGColor(red: 0.16, green: 0.21, blue: 0.31, alpha: 1.0),
+            CGColor(red: 0.06, green: 0.08, blue: 0.14, alpha: 1.0)
+        ] as CFArray,
+        locations: [0.0, 1.0]
+    ) {
         cg.drawLinearGradient(
             bgGrad,
             start: CGPoint(x: s * 0.5, y: s - pad),
@@ -46,28 +49,61 @@ func renderWebcamAppIcon(size: Int) -> NSBitmapImageRep? {
             options: []
         )
     }
+
+    if let ambient = CGGradient(
+        colorsSpace: colorSpace,
+        colors: [
+            CGColor(red: 0.16, green: 0.64, blue: 0.98, alpha: 0.24),
+            CGColor(red: 0.16, green: 0.64, blue: 0.98, alpha: 0.0)
+        ] as CFArray,
+        locations: [0.0, 1.0]
+    ) {
+        cg.drawRadialGradient(
+            ambient,
+            startCenter: CGPoint(x: s * 0.28, y: s * 0.82),
+            startRadius: 0,
+            endCenter: CGPoint(x: s * 0.28, y: s * 0.82),
+            endRadius: s * 0.55,
+            options: []
+        )
+    }
     cg.restoreGState()
 
-    // Subtle border
-    cg.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.14))
-    cg.setLineWidth(max(1.0, s * 0.012))
+    cg.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.18))
+    cg.setLineWidth(max(1.0, s * 0.011))
     cg.addPath(bgPath)
     cg.strokePath()
 
-    // 2. Webcam Stand / Clip Base
-    let baseRect = CGRect(x: s * 0.29, y: s * 0.17, width: s * 0.42, height: s * 0.065)
-    let basePath = CGPath(roundedRect: baseRect, cornerWidth: s * 0.03, cornerHeight: s * 0.03, transform: nil)
-    cg.setFillColor(CGColor(red: 0.62, green: 0.67, blue: 0.76, alpha: 1.0))
+    // 2. Machined Aluminum Monitor Mount / Base
+    let baseRect = CGRect(x: s * 0.27, y: s * 0.155, width: s * 0.46, height: s * 0.068)
+    let basePath = CGPath(roundedRect: baseRect, cornerWidth: s * 0.034, cornerHeight: s * 0.034, transform: nil)
+    cg.saveGState()
     cg.addPath(basePath)
-    cg.fillPath()
+    cg.clip()
+    if let baseGrad = CGGradient(
+        colorsSpace: colorSpace,
+        colors: [
+            CGColor(red: 0.78, green: 0.83, blue: 0.90, alpha: 1.0),
+            CGColor(red: 0.48, green: 0.54, blue: 0.63, alpha: 1.0)
+        ] as CFArray,
+        locations: [0.0, 1.0]
+    ) {
+        cg.drawLinearGradient(
+            baseGrad,
+            start: CGPoint(x: s * 0.5, y: baseRect.maxY),
+            end: CGPoint(x: s * 0.5, y: baseRect.minY),
+            options: []
+        )
+    }
+    cg.restoreGState()
 
-    let neckRect = CGRect(x: s * 0.44, y: s * 0.22, width: s * 0.12, height: s * 0.10)
-    cg.setFillColor(CGColor(red: 0.46, green: 0.51, blue: 0.60, alpha: 1.0))
+    let neckRect = CGRect(x: s * 0.435, y: s * 0.21, width: s * 0.13, height: s * 0.11)
+    cg.setFillColor(CGColor(red: 0.42, green: 0.47, blue: 0.56, alpha: 1.0))
     cg.fill(neckRect)
 
-    // 3. Outer Webcam Body Circle
-    let lensCenter = CGPoint(x: s * 0.5, y: s * 0.56)
-    let outerRadius = s * 0.27
+    // 3. Brushed Silver Outer Webcam Housing
+    let lensCenter = CGPoint(x: s * 0.5, y: s * 0.565)
+    let outerRadius = s * 0.278
     let outerRect = CGRect(
         x: lensCenter.x - outerRadius,
         y: lensCenter.y - outerRadius,
@@ -75,13 +111,22 @@ func renderWebcamAppIcon(size: Int) -> NSBitmapImageRep? {
         height: outerRadius * 2
     )
     cg.saveGState()
+    cg.setShadow(offset: CGSize(width: 0, height: -s * 0.025), blur: s * 0.045, color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
+    cg.setFillColor(CGColor(red: 0.85, green: 0.89, blue: 0.94, alpha: 1.0))
+    cg.fillEllipse(in: outerRect)
+    cg.restoreGState()
+
+    cg.saveGState()
     cg.addEllipse(in: outerRect)
     cg.clip()
-    let bodyColors = [
-        CGColor(red: 0.90, green: 0.93, blue: 0.97, alpha: 1.0),
-        CGColor(red: 0.68, green: 0.73, blue: 0.80, alpha: 1.0)
-    ] as CFArray
-    if let bodyGrad = CGGradient(colorsSpace: colorSpace, colors: bodyColors, locations: [0.0, 1.0]) {
+    if let bodyGrad = CGGradient(
+        colorsSpace: colorSpace,
+        colors: [
+            CGColor(red: 0.95, green: 0.97, blue: 0.99, alpha: 1.0),
+            CGColor(red: 0.64, green: 0.70, blue: 0.79, alpha: 1.0)
+        ] as CFArray,
+        locations: [0.0, 1.0]
+    ) {
         cg.drawLinearGradient(
             bodyGrad,
             start: CGPoint(x: lensCenter.x, y: lensCenter.y + outerRadius),
@@ -91,19 +136,29 @@ func renderWebcamAppIcon(size: Int) -> NSBitmapImageRep? {
     }
     cg.restoreGState()
 
-    // 4. Dark Optical Barrel Ring
-    let barrelRadius = s * 0.18
+    // 4. Anodized Dark Optical Barrel + Precision Ring
+    let barrelRadius = s * 0.192
     let barrelRect = CGRect(
         x: lensCenter.x - barrelRadius,
         y: lensCenter.y - barrelRadius,
         width: barrelRadius * 2,
         height: barrelRadius * 2
     )
-    cg.setFillColor(CGColor(red: 0.10, green: 0.12, blue: 0.17, alpha: 1.0))
+    cg.setFillColor(CGColor(red: 0.08, green: 0.10, blue: 0.15, alpha: 1.0))
     cg.fillEllipse(in: barrelRect)
 
-    // 5. Sapphire Optical Glass Element
-    let glassRadius = s * 0.125
+    let ringRadius = s * 0.162
+    cg.setStrokeColor(CGColor(red: 0.25, green: 0.58, blue: 0.92, alpha: 0.55))
+    cg.setLineWidth(max(1.0, s * 0.008))
+    cg.strokeEllipse(in: CGRect(
+        x: lensCenter.x - ringRadius,
+        y: lensCenter.y - ringRadius,
+        width: ringRadius * 2,
+        height: ringRadius * 2
+    ))
+
+    // 5. Multi-Coated Sapphire Optical Element
+    let glassRadius = s * 0.132
     let glassRect = CGRect(
         x: lensCenter.x - glassRadius,
         y: lensCenter.y - glassRadius,
@@ -113,40 +168,66 @@ func renderWebcamAppIcon(size: Int) -> NSBitmapImageRep? {
     cg.saveGState()
     cg.addEllipse(in: glassRect)
     cg.clip()
-    let glassColors = [
-        CGColor(red: 0.18, green: 0.62, blue: 0.98, alpha: 1.0),
-        CGColor(red: 0.06, green: 0.22, blue: 0.52, alpha: 1.0)
-    ] as CFArray
-    if let glassGrad = CGGradient(colorsSpace: colorSpace, colors: glassColors, locations: [0.0, 1.0]) {
+    if let glassGrad = CGGradient(
+        colorsSpace: colorSpace,
+        colors: [
+            CGColor(red: 0.22, green: 0.72, blue: 1.00, alpha: 1.0),
+            CGColor(red: 0.07, green: 0.28, blue: 0.66, alpha: 1.0),
+            CGColor(red: 0.03, green: 0.10, blue: 0.26, alpha: 1.0)
+        ] as CFArray,
+        locations: [0.0, 0.58, 1.0]
+    ) {
         cg.drawRadialGradient(
             glassGrad,
-            startCenter: CGPoint(x: lensCenter.x - glassRadius * 0.3, y: lensCenter.y + glassRadius * 0.3),
+            startCenter: CGPoint(x: lensCenter.x - glassRadius * 0.28, y: lensCenter.y + glassRadius * 0.30),
             startRadius: 0,
             endCenter: lensCenter,
-            endRadius: glassRadius * 1.15,
+            endRadius: glassRadius * 1.12,
             options: []
         )
     }
     cg.restoreGState()
 
-    // Specular lens glint + green status LED
-    let glintRadius = s * 0.035
-    cg.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.72))
+    let pupilRadius = s * 0.052
+    cg.setFillColor(CGColor(red: 0.02, green: 0.05, blue: 0.13, alpha: 0.72))
     cg.fillEllipse(in: CGRect(
-        x: lensCenter.x - glassRadius * 0.48,
-        y: lensCenter.y + glassRadius * 0.18,
+        x: lensCenter.x - pupilRadius,
+        y: lensCenter.y - pupilRadius,
+        width: pupilRadius * 2,
+        height: pupilRadius * 2
+    ))
+
+    let glintRadius = s * 0.034
+    cg.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.82))
+    cg.fillEllipse(in: CGRect(
+        x: lensCenter.x - glassRadius * 0.50,
+        y: lensCenter.y + glassRadius * 0.20,
         width: glintRadius * 2,
         height: glintRadius * 2
     ))
 
-    let ledRadius = s * 0.018
-    cg.setFillColor(CGColor(red: 0.18, green: 0.88, blue: 0.45, alpha: 1.0))
+    let secondaryGlint = s * 0.015
+    cg.setFillColor(CGColor(red: 0.55, green: 0.88, blue: 1.0, alpha: 0.60))
     cg.fillEllipse(in: CGRect(
-        x: lensCenter.x - ledRadius,
-        y: lensCenter.y + outerRadius * 0.76 - ledRadius,
+        x: lensCenter.x + glassRadius * 0.24,
+        y: lensCenter.y - glassRadius * 0.42,
+        width: secondaryGlint * 2,
+        height: secondaryGlint * 2
+    ))
+
+    // Glowing Emerald Hardware-Active Indicator LED
+    let ledRadius = s * 0.019
+    let ledCenter = CGPoint(x: lensCenter.x, y: lensCenter.y + outerRadius * 0.77)
+    cg.saveGState()
+    cg.setShadow(offset: .zero, blur: s * 0.02, color: CGColor(red: 0.16, green: 0.92, blue: 0.48, alpha: 0.9))
+    cg.setFillColor(CGColor(red: 0.18, green: 0.90, blue: 0.47, alpha: 1.0))
+    cg.fillEllipse(in: CGRect(
+        x: ledCenter.x - ledRadius,
+        y: ledCenter.y - ledRadius,
         width: ledRadius * 2,
         height: ledRadius * 2
     ))
+    cg.restoreGState()
 
     return rep
 }

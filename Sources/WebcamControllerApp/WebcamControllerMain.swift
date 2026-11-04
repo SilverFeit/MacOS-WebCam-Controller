@@ -11,6 +11,15 @@ struct WebcamControllerMain {
             runHardwareDiagnosticDump()
             return
         }
+        if let idx = args.firstIndex(of: "--render-docs-assets"), idx + 1 < args.count {
+            do {
+                try DocAssetRenderer.generateAllAssets(outputDirectory: args[idx + 1])
+                return
+            } catch {
+                fputs("Failed to render documentation assets: \(error)\n", stderr)
+                exit(1)
+            }
+        }
 
         let app = NSApplication.shared
         let delegate = AppDelegate()
