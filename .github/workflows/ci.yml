@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build App, CLI & Run Tests (macOS arm64)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build WebcamControllerApp (Release)
+        run: swift build -c release --arch arm64 --product WebcamControllerApp
+
+      - name: Build webcamctl CLI (Release)
+        run: swift build -c release --arch arm64 --product webcamctl
+
+      - name: Run UVCCore unit test suite
+        run: swift run UVCCoreTests
+
+      - name: Verify webcamctl CLI version & help
+        run: |
+          .build/release/webcamctl version
+          .build/release/webcamctl --help >/dev/null

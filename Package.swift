@@ -16,6 +16,10 @@ let package = Package(
             targets: ["WebcamControllerApp"]
         ),
         .executable(
+            name: "webcamctl",
+            targets: ["webcamctl"]
+        ),
+        .executable(
             name: "UVCCoreTests",
             targets: ["UVCCoreTests"]
         )
@@ -34,7 +38,11 @@ let package = Package(
             dependencies: ["CUVCHardware"],
             linkerSettings: [
                 .linkedFramework("IOKit"),
-                .linkedFramework("Foundation")
+                .linkedFramework("Foundation"),
+                .linkedFramework("AppKit"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("CoreMediaIO"),
+                .linkedFramework("CoreAudio")
             ]
         ),
         .executableTarget(
@@ -44,6 +52,13 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("ServiceManagement")
+            ]
+        ),
+        .executableTarget(
+            name: "webcamctl",
+            dependencies: ["UVCCore"],
+            linkerSettings: [
+                .linkedFramework("Foundation")
             ]
         ),
         .executableTarget(

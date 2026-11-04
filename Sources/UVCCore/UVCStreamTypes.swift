@@ -241,6 +241,10 @@ public struct UVCStreamSelection: Equatable, Hashable, Codable, Sendable {
         "\(width)x\(height)"
     }
 
+    public var shortSummary: String {
+        "\(width)×\(height)@\(fps)fps"
+    }
+
     public var compactSummary: String {
         "\(width)×\(height) @ \(fps) fps"
     }

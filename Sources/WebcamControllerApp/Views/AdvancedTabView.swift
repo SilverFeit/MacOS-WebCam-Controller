@@ -259,6 +259,7 @@ public struct AdvancedTabView: View {
                     label: "Zoom",
                     labelWidth: 68,
                     state: activeZoomState,
+                    formattedValue: activeZoomState.isSupported ? activeZoomState.formattedZoomShort : nil,
                     leftIcon: {
                         Image(systemName: "person.crop.rectangle")
                             .font(.system(size: 12))
@@ -321,6 +322,7 @@ public struct AdvancedTabView: View {
                         label: "Roll",
                         labelWidth: 68,
                         state: camera.rollAbsolute,
+                        formattedValue: "\(camera.rollAbsolute.current)°",
                         leftIcon: { Image(systemName: "rotate.left").font(.system(size: 12)) },
                         rightIcon: { Image(systemName: "rotate.right").font(.system(size: 12)) }
                     ) { _ = camera.setRollAbsolute($0) }

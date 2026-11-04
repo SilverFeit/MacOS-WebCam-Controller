@@ -10,11 +10,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
     private var outsideClickMonitor: Any?
+    private var streamOverlayController: StreamOverlayController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBarStatusItem()
         setupPopover()
+        streamOverlayController = StreamOverlayController(manager: cameraManager)
     }
 
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

@@ -4,11 +4,11 @@
 
 # MacOS WebCam Controller — User Guide
 
-**Version 1.0 · Direct USB UVC Hardware Control for Apple Silicon Macs**
+**Version 1.1.0 · Direct USB UVC Hardware Control + `webcamctl` CLI for Apple Silicon Macs**
 
 </div>
 
-MacOS WebCam Controller changes the physical hardware settings of an external USB webcam directly from the macOS menu bar and from a standalone window titled **Webcam Settings Panel**. The app does not display a live preview and does not record microphone audio. Adjust a control here, and the webcam applies that register directly inside its sensor/ISP for whatever app is already displaying your camera picture.
+MacOS WebCam Controller changes the physical hardware settings of an external USB webcam directly from the macOS Menu Bar, from the standalone **Webcam Settings Panel**, and from Terminal via **`webcamctl`**. It never opens a video capture session and never requests Camera or Microphone permissions. Every adjustment writes directly to your webcam's internal sensor and ISP over USB Endpoint 0 for whichever app (Zoom, OBS, Teams, Meet, FaceTime, WhatsApp, or Chrome) is displaying your camera.
 
 <p align="center">
   <img src="assets/panel-basic-advanced.png" alt="Basic and Advanced Tabs" width="100%" />
@@ -16,184 +16,87 @@ MacOS WebCam Controller changes the physical hardware settings of an external US
 
 ## Requirements
 
-- An Apple Silicon Mac. Certified compatibility is **Apple Silicon only** (arm64). This release does not support Intel Macs.
-- macOS 14 or later.
-- Tested on **macOS 27.0.1 (Build 26A434)**.
-- An external USB webcam that exposes standard USB video controls. The built-in Mac camera is not controlled by this app.
-- Each slider, mode, and switch is limited to what that specific camera implements. Unsupported items appear disabled or as **N/A**.
+- **Apple Silicon Mac** (`arm64` — M1, M2, M3, M4, or newer).
+- **macOS 14 Sonoma or later** *(verified through **macOS 27.0.1**)*.
+- **External USB UVC webcam.** Built-in MacBook/iMac FaceTime cameras use Apple's internal ISP rather than USB UVC and are not controlled by this app.
 
-## Install
+## Install & Update
 
-1. Download `MacOS-WebCam-Controller-1.0.dmg` from the v1.0 release.
-2. Open the disk image. It contains **WebCam Controller** and a shortcut to **Applications**.
-3. Drag **WebCam Controller** onto **Applications**.
-4. Eject the disk image.
+### Option 1 — Homebrew (Recommended)
 
-You can instead download `MacOS-WebCam-Controller-1.0.app.zip`, unzip it, and move **WebCam Controller.app** into **Applications**.
+Installs both **`/Applications/WebCam Controller.app`** and **`/opt/homebrew/bin/webcamctl`**, and clears Gatekeeper quarantine automatically:
 
-## First launch and permissions
+```bash
+brew install --cask SilverFeit/tap/macos-webcam-controller
+```
 
-Open **WebCam Controller** from the Applications folder. The app runs as a menu-bar item (the webcam icon). It does not add a lasting Dock icon until the settings window is open.
+Upgrade whenever a new release is available:
 
-This copy is ad-hoc signed, so Gatekeeper may block the first open:
+```bash
+brew upgrade --cask macos-webcam-controller
+```
 
-- Control-click the app and choose **Open**, then confirm **Open**.
-- Or go to **System Settings → Privacy & Security** and choose **Open Anyway** for WebCam Controller.
+### Option 2 — Direct `.dmg` or `.zip` Download
 
-**Camera and Microphone:** the app does not request either permission. It never opens a capture session. You should not see a Camera or Microphone prompt from this app. If a prompt appears, it is from the other program that is displaying the camera, not from WebCam Controller.
+1. Download `MacOS-WebCam-Controller-1.1.0.dmg` from [GitHub Releases](https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/latest).
+2. Open the disk image and drag **WebCam Controller** onto **Applications**.
+3. On first launch of a manual download, Control-click **WebCam Controller.app** → **Open** → **Open** (or run `xattr -dr com.apple.quarantine "/Applications/WebCam Controller.app"`).
+4. Optional — symlink the bundled CLI into `/opt/homebrew/bin`:
+   ```bash
+   ln -sf "/Applications/WebCam Controller.app/Contents/MacOS/webcamctl" /opt/homebrew/bin/webcamctl
+   ```
 
-**Login item:** after the app is in Applications, you can enable **Launch WebCam Controller automatically at macOS Login** on the Preferences tab. macOS may ask you to approve that login item under **System Settings → General → Login Items & Extensions**. If registration fails, the error text is shown under the checkbox.
+## Menu Bar & Bottom Version / Update Bar
 
-## Menu bar
+Left-click the webcam icon in the macOS Menu Bar to open the quick popover, or right-click it to open **Webcam Settings Panel** directly on **Advanced**.
 
-Left-click the webcam icon to open a panel about 414 points wide.
+At the bottom of **both** the Menu Bar popover and **Webcam Settings Panel**, the footer displays:
 
-| Control | What it does |
-| --- | --- |
-| Camera name or picker | Shows the connected webcam. With two or more cameras, a menu lists each product name and its USB vendor/product id. Choosing one makes that camera the target of every control. |
-| Lock | Turns **hardware lock** on or off. The icon is a closed lock while lock is on. |
-| Circular arrow | Rescans USB webcams and reads their current values. |
-| **Panel** | Opens **Webcam Settings Panel** on the **Basic** tab. |
-| **Advanced…** | Opens **Webcam Settings Panel** on the **Advanced** tab. |
-| Gear | Opens **Webcam Settings Panel** on the **Preferences** tab. |
-| Basic controls | The same exposure, image, and white-balance controls as the Basic tab, in a shorter layout. |
-| Preset menu | **Camera Default** restores the camera’s own defaults. Saved presets for this camera are listed underneath. A star marks the preset set to load at start. Choosing an entry applies it immediately. |
-| **Defaults** | Restores hardware defaults and selects **Camera Default**. |
-| Power icon | Quits the app. |
+- **Live Status / Active Call Telemetry:** Shows current status when idle, or **`Live: <App> · <Width>×<Height>@<FPS>fps (<Duration>)`** with a green indicator while an app is streaming from the webcam.
+- **`Locked` Indicator:** Appears whenever the Anti-Reset Hardware Lock is enabled.
+- **Version & GitHub Redirect (`v1.1.0 · GitHub ↗`):** Click to open the official GitHub Releases page, or click the adjacent refresh icon (`↻`) to check for updates immediately.
+- **Automatic Update Pill (`⬆ Update vX.Y.Z · GitHub ↗`):** Highlights automatically when a newer release is published on GitHub.
 
-Clicking outside the popover closes it. Right-clicking the menu-bar icon opens the settings window directly on **Advanced**.
-
-If no compatible webcam is connected, the popover says **No USB UVC Camera**, explains that you need to plug one in, and offers **Rescan USB** and **Quit**.
-
-By default, unsupported sliders are hidden in this popover (**Hide unsupported hardware sliders inside Menu Bar quick popover** is on). The full window still shows those controls.
-
-## Webcam Settings Panel
-
-The window title is **Webcam Settings Panel**. It can be resized (minimum about 456×620). While it is open, the app appears in the Dock like a normal application. Closing the window hides the Dock icon again and leaves only the menu-bar item. Opening the app again from the Finder while it is already running brings this window forward.
-
-The header has:
-
-- A camera menu, labeled with the product name and USB id, or the text **No USB UVC Webcam Connected**.
-- A pin button. When filled, the window stays above other windows. The same choice is on the Preferences tab as **Keep 'Webcam Settings Panel' floating above other windows**.
-- A rescan button.
-
-Under that, a segmented control switches **Basic**, **Advanced**, and **Preferences**.
-
-A status line at the bottom shows a short message (green when a camera is selected, orange when none is). **Locked** appears there while hardware lock is on.
-
-If nothing is connected, the window asks you to connect an external USB webcam and offers **Scan USB Devices**.
+## Tabs Overview
 
 ### Basic
-
-**Exposure**
-
-- **Auto-Exposure Mode:** Manual, Auto, Shutter Priority, and Aperture Priority. Only modes the camera reports are enabled. Shutter Priority and Manual allow the exposure-time slider. Aperture Priority and Manual allow the aperture slider on the Advanced tab when the camera has one.
-- **Exposure Time** and **Gain** sliders.
-
-**Image**
-
-- **Brightness**, **Contrast**, **Hue**, **Saturation**, **Sharpness**, and **Gamma**.
-- If the camera is currently applying contrast or hue automatically, that slider is locked until automatic mode is no longer active. There is no separate on/off switch for those two automatic modes in this window; presets can still store the camera’s automatic state.
-
-**White Balance Temperature**
-
-- An **Auto** checkbox. While Auto is on, the temperature slider is locked.
-- The temperature slider shows the value in kelvin (for example `4500K`) when the camera supports it.
-
-Every active slider has a rollback arrow. The arrow is highlighted when the value is not the camera default. The numeric readout is accent-colored when it differs from the default, and **N/A** when the camera does not support that control.
+- **Auto-Exposure Mode:** `Manual`, `Auto`, `Shutter Priority`, and `Aperture Priority` (enabled according to the camera's UVC bitmask).
+- **Exposure Time (Photographic Shutter) & Gain:** Displays exposure time in photographic shutter notation (`1/60s`, `1/50s`, `1/30s`) alongside sensor Gain.
+- **ISP Image Sliders:** **Brightness**, **Contrast**, **Hue**, **Saturation**, **Sharpness**, and **Gamma**.
+- **White Balance Temperature:** Toggle **Auto** off to dial exact color temperature in Kelvin (`4500K`).
+- **Punctual Rollback (`↺`):** Every manual control has a `↺` button between its icon and value readout that restores **only** that register to its hardware factory default (`GET_DEF`).
 
 ### Advanced
-
-**Video Resolution & Frame Rate** (when the camera describes its video modes)
-
-- **Format**, if the camera offers more than one.
-- **Resolution** menu, highest resolutions first.
-- **FPS** choices that the selected resolution actually supports. Unavailable rates stay disabled.
-- A compatibility line lists the frame rates for the current resolution, and a status line reports the live or committed USB mode.
-- Rollback arrows restore the camera’s default format, resolution, or frame rate.
-- If another program already has the camera stream open, the app still records the format you chose. That choice is committed on the camera when the stream can be updated, and otherwise staged until the program using the camera starts the stream again. The status line states which of those happened.
-
-**Power Line Frequency (anti-flicker)**
-
-- Disabled, 50 Hz, 60 Hz, and Auto, limited to the range the camera accepts.
-
-**Backlight Compensation**
-
-- Off and On. If the camera supports more than a single step, a **Level** slider appears.
-
-**Low Light Compensation (AE Priority)**
-
-- **Off (Constant FPS)** or **On (Auto Low-Light)**.
-
-**Focus**
-
-- **Auto** checkbox and a manual focus slider. Auto locks the slider.
-
-**Movement and optics**
-
-- **Zoom** uses the camera’s optical zoom when present, otherwise its digital zoom control when that is the one the camera provides.
-- **Pan** and **Tilt**, shown in degrees when the camera reports absolute position.
-- **Aperture**, only if the camera supports it. It is locked unless the exposure mode allows manual aperture.
-- **Roll**, only if supported.
-- **Hardware Privacy Shutter**, only if supported. The label reads **Closed** or **Open**.
-- **Progressive Scan**, only if supported. The readout is **Prog** or **Interl**.
+- **Video Resolution & Frame Rate:** Lists hardware formats (`MJPEG`, `Uncompressed YUY2`, `H.264`), resolutions (`4K`, `2K`, `1080p`, `720p`, etc.), and **only** compatible FPS choices for the active resolution.
+- **Power Line Frequency (Anti-Flicker):** `Disabled`, `50 Hz`, `60 Hz`, and `Auto` (automatically clamped to `60 Hz` on UVC `< 1.5` cameras whose firmware stalls Endpoint 0 on `Auto`).
+- **Backlight & Low-Light Compensation (`AE Priority`).**
+- **Optics & PTZ:** **Auto/Manual Focus**, **Optical/Digital Zoom (`1.3×`)**, **Pan**, **Tilt**, **Aperture**, **Roll**, **Hardware Privacy Shutter**, and **Progressive Scan**.
 
 ### Preferences
+- **Target USB Camera:** Displays Vendor/Product ID, USB location & serial, UVC spec, **Firmware (`bcdDevice`)**, **Extension Unit count**, and **Configured ID** (`Bind Active Camera ID`, `Rescan USB Bus`, `Refresh Registers`).
+- **Hardware Control, Call Fixes & Menu Bar:**
+  - **Lock Hardware Values (Anti-Reset Daemon):** Re-applies drifted registers every `2.5s`.
+  - **Auto-fix slow `5 fps` call streams:** Automatically upgrades sluggish `<= 10 fps` streams (e.g. WhatsApp Desktop) to `1080p @ 30 fps` MJPEG.
+  - **Floating Stream Stats HUD:** `Off`, `While in Call`, or `Always` — shows a compact non-activating floating HUD with live resolution, FPS, shutter, white balance, and call timer.
+  - **Load at Start**, **Compact Menu Bar**, **Keep Panel on Top**, and **Launch at macOS Login**.
+- **Version, GitHub Updates, Homebrew & CLI:** Manual update check, GitHub Releases link, automatic update check toggle, one-click `Copy brew` button, and `Open Log` (`~/Library/Logs/WebCamController.log`).
+- **Recent Call Sessions:** Summarizes recent webcam sessions (apps, stream mode, duration) with **Clear History**.
 
-**Target USB Camera (Configured by Hardware ID)** shows, for the selected camera:
+## Command-Line Interface (`webcamctl`)
 
-- Device name
-- USB vendor and product id
-- USB location and serial number (or **N/A**)
-- Descriptor summary (version and unit ids)
-- **Configured ID** (**Auto** until a camera has been stored)
+Run `webcamctl --help` for full usage. Key commands:
 
-Buttons:
-
-- **Bind Active Camera ID** stores this camera as the one to select when it is present.
-- **Rescan USB Bus** looks for webcams again.
-- **Refresh Registers** reads the live values from the selected camera.
-
-**Hardware Control & Menu Bar Preferences**
-
-- **Lock Hardware Values (Anti-Reset Daemon).** Off by default. About every 2.5 seconds the app compares the selected camera with the values you set and writes back any that drifted. The status line reports how many values were re-applied. The same switch is the lock button in the menu bar.
-- **Automatically apply 'Load at Start' preset when USB camera connects.** On by default. When a webcam is detected, the preset marked **Load at Start** for that camera is applied once for that connection.
-- **Hide unsupported hardware sliders inside Menu Bar quick popover.** On by default.
-- **Keep 'Webcam Settings Panel' floating above other windows.** Off by default.
-- **Launch WebCam Controller automatically at macOS Login.** Uses the system login-item setting for this app. See First launch above.
-
-**Restore Hardware Defaults** writes the camera’s default for every supported control and selects **Camera Default**.
-
-**Quit WebCam Controller** exits the app.
-
-### Manage Settings
-
-Shown under Basic and Advanced, not on Preferences.
-
-- **Save Current Settings** asks for a name (the field suggests names such as Daylight, Studio, or Night, and defaults to `Preset N`). **Save** stores the current controls for this camera. Saving the same name updates that preset.
-- **Delete Saved Settings** removes the preset selected in the menu. **Camera Default** cannot be deleted.
-- The preset menu applies **Camera Default** or a saved preset as soon as you choose it.
-- **Load at Start** toggles that flag on the selected preset. Only one preset per camera is marked. The menu shows a star beside that preset. Choosing **Load at Start** while **Camera Default** is selected clears the startup preset.
-
-Presets are stored on this Mac for each camera identity and are not synced by the app.
-
-## Hardware lock
-
-Turn the lock on after you have the picture the way you want it. The app remembers that snapshot for the selected camera and, while the lock stays on, puts those values back if they change. Quit, or turn the lock off, to stop the reapply cycle. The preference is remembered the next time you launch the app.
-
-## Multiple cameras
-
-The app watches for webcams being plugged in or removed and refreshes the list. It can track up to 16 USB video devices at once. Use the camera menu to pick the active one. **Bind Active Camera ID** keeps a specific camera preferred across launches. Presets and **Load at Start** belong to the camera they were saved for, not to every camera on the bus.
-
-## Limitations
-
-- Certified compatibility is Apple Silicon only. Do not expect this build to run on Intel Macs.
-- macOS 14 or later is required. The copy used for this release was tested on macOS 27.0.1 (Build 26A434).
-- Built-in Mac cameras are not supported.
-- A control is only as capable as the webcam. Ranges, steps, and which modes exist all come from the device.
-- There is no preview inside the app.
-- The app does not request Camera or Microphone access, and it does not replace the program that is displaying the camera.
-- If a video program already owns the camera stream, a resolution or frame-rate change may be staged until that program opens the stream again.
-- Contrast-auto and hue-auto do not have their own checkboxes. A slider stays locked while the camera reports that automatic mode as on.
-- Login-item registration depends on macOS accepting this app. Keep the app in Applications before enabling it. An ad-hoc signature can cause that request to fail; the Preferences tab shows the error when it does.
-- The release app is ad-hoc signed. macOS will warn on first launch until you choose Open.
+| Command | Description |
+| :--- | :--- |
+| `webcamctl list [--json]` | List connected USB UVC cameras, persistent IDs, firmware, and active stream status. |
+| `webcamctl describe [--raw] [--json]` | Show UVC units, Extension Unit GUIDs, supported controls, and video modes (`--raw` dumps USB descriptor hex). |
+| `webcamctl get [control...] [--json]` | Read all supported controls or specific controls (`shutter`, `kelvin`, `brightness`, `stream`, etc.). |
+| `webcamctl set <key=val>...` | Write one or more registers (`shutter=1/60`, `kelvin=4500`, `brightness=+8`, `focus=auto`). Auto-unlocks Manual mode when setting manual values. |
+| `webcamctl reset <control...|all>` | Restore individual controls or all hardware registers to factory `GET_DEF`. |
+| `webcamctl stream [res] [fps] [codec]` | Inspect or negotiate video stream mode (e.g. `webcamctl stream 2k 30 mjpeg`, `webcamctl stream reset`). |
+| `webcamctl preset list\|apply\|save\|delete` | Manage saved per-camera presets from scripts, Shortcuts, Raycast, or Stream Deck. |
+| `webcamctl lock [status\|on\|off]` | Query or toggle the Anti-Reset Hardware Lock daemon. |
+| `webcamctl who [--json]` | Show whether the webcam is currently streaming and which macOS apps are using it (zero TCC permissions). |
+| `webcamctl sessions [--clear]` | View or clear recent call session history. |
+| `webcamctl check-update [--json]` | Query GitHub Releases for newer versions and print upgrade instructions. |
+| `webcamctl version` | Print installed version and repository URL. |

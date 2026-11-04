@@ -421,6 +421,75 @@ struct UVCHardwareTestSuite {
             try expectEqual(camera.contrast.current, customContrast, "Contrast remained untouched by punctual brightness rollback")
         }
 
+        runTest("11. SemanticVersion Parsing & GitHub Release Precedence") {
+            let v1_0 = SemanticVersion(parsing: "v1.0")
+            let v1_1_beta = SemanticVersion(parsing: "1.1.0-beta.1")
+            let v1_1 = SemanticVersion(parsing: "v1.1.0+build42")
+            let v1_2 = SemanticVersion(parsing: "1.2.0")
+
+            try expect(v1_0 != nil && v1_1_beta != nil && v1_1 != nil && v1_2 != nil, "Parsed all semantic versions")
+            try expect(v1_0! < v1_1_beta!, "1.0.0 < 1.1.0-beta.1")
+            try expect(v1_1_beta! < v1_1!, "Prerelease 1.1.0-beta.1 < Release 1.1.0")
+            try expect(v1_1! < v1_2!, "1.1.0 < 1.2.0")
+            try expectEqual(v1_1?.description, "1.1.0")
+        }
+
+        runTest("12. Photographic Shutter Speed (`1/60s`) & Optical Zoom (`1.3×`) Formatting/Parsing") {
+            try expectEqual(UVCValueFormatter.shutterShortLabel(units100us: 166), "1/60s")
+            try expectEqual(UVCValueFormatter.shutterShortLabel(units100us: 200), "1/50s")
+            try expectEqual(UVCValueFormatter.shutterShortLabel(units100us: 333), "1/30s")
+
+            try expectEqual(UVCValueFormatter.parseShutterUnits("1/60"), 167)
+            try expectEqual(UVCValueFormatter.parseShutterUnits("1/50s"), 200)
+            try expectEqual(UVCValueFormatter.parseShutterUnits("20ms"), 200)
+            try expectEqual(UVCValueFormatter.parseShutterUnits("166"), 166)
+
+            try expectEqual(UVCValueFormatter.zoomShortLabel(130, minimum: 100), "1.3×")
+            try expectEqual(UVCValueFormatter.zoomShortLabel(100, minimum: 100), "1.0×")
+        }
+
+        runTest("13. UVCCommandBridge CLI Alias Normalization, Readouts & Resolution Token Parsing") {
+            try expectEqual(UVCCameraDevice.normalizeControlID("shutter"), "exposure_time")
+            try expectEqual(UVCCameraDevice.normalizeControlID("kelvin"), "white_balance")
+            try expectEqual(UVCCameraDevice.normalizeControlID("anti-flicker"), "power_line_frequency")
+            try expectEqual(UVCCameraDevice.normalizeControlID("low_light"), "exposure_priority")
+
+            let res2k = UVCCameraDevice.parseResolutionToken("2k")
+            try expectEqual(res2k?.0, 2560)
+            try expectEqual(res2k?.1, 1440)
+            let resCustom = UVCCameraDevice.parseResolutionToken("1920x1080")
+            try expectEqual(resCustom?.0, 1920)
+            try expectEqual(resCustom?.1, 1080)
+
+            let showcase = UVCCameraDevice.makeDocumentationShowcaseDevice()
+            let shutterReadout = try showcase.readControl("shutter")
+            try expectEqual(shutterReadout.id, "exposure_time")
+            try expectEqual(shutterReadout.formattedDisplay, "1/60s")
+            let wbReadout = try showcase.readControl("kelvin")
+            try expectEqual(wbReadout.id, "white_balance")
+            try expect(wbReadout.isSupported, "White balance supported on showcase device")
+        }
+
+        runTest("14. Live USB Firmware, Extension Unit Introspection & UVC < 1.5 Anti-Flicker Stall Guard") {
+            let suiteName = "com.webcamcontroller.fwxu.\(UUID().uuidString)"
+            let testDefaults = UserDefaults(suiteName: suiteName)!
+            defer { testDefaults.removePersistentDomain(forName: suiteName) }
+
+            let manager = CameraManager(defaults: testDefaults, enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+
+            guard let camera = manager.selectedCamera else {
+                throw TestSkipped(reason: "no physical USB UVC camera attached")
+            }
+            try expect(camera.identity.firmwareHex.hasPrefix("0x"), "Firmware BCD hex formatted")
+            if camera.identity.uvcVersionBCD < 0x0150 && camera.powerLineFrequency.isSupported {
+                try expect(
+                    camera.powerLineFrequency.maximum <= 2,
+                    "UVC < 1.5 camera clamps PowerLineFrequency max <= 2 (60 Hz) to prevent Endpoint 0 Auto(3) stall"
+                )
+            }
+        }
+
         print("---------------------------------------------------------------")
         print(" Summary: \(passed) passed, \(skipped) skipped, \(failed) failed")
         print("===============================================================")

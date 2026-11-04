@@ -28,7 +28,11 @@ enum DocAssetRenderer {
         let tempDefaults = UserDefaults(suiteName: suiteName)!
         defer { tempDefaults.removePersistentDomain(forName: suiteName) }
 
-        let manager = CameraManager(defaults: tempDefaults, enableHotplugWatcher: false)
+        let manager = CameraManager(
+            defaults: tempDefaults,
+            enableHotplugWatcher: false,
+            enableBackgroundMonitors: false
+        )
         defer { manager.shutdown() }
 
         manager.loadDocumentationShowcaseCamera()
@@ -391,11 +395,11 @@ enum DocAssetRenderer {
         )
 
         let bullets = [
-            "✓  Exposure, Shutter, Gain, Kelvin & ISP Color",
-            "✓  2K / 4K Resolutions & Validated FPS Matrix",
-            "✓  Punctual Rollback (↺) to Factory Defaults",
-            "✓  Anti-Reset Hardware Lock & Camera ID Presets",
-            "✓  0% Video CPU Overhead · No Camera/Mic Prompts"
+            "✓  Exposure, 1/60s Shutter, Kelvin & ISP Color",
+            "✓  2K / 4K Resolutions, Validated FPS & 5fps Call Fix",
+            "✓  Punctual Rollback (↺) & Anti-Reset Hardware Lock",
+            "✓  Homebrew Cask + Full `webcamctl` CLI Automation",
+            "✓  0% Video CPU Overhead · Zero Camera/Mic Prompts"
         ]
         let bulletAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13.5, weight: .medium),

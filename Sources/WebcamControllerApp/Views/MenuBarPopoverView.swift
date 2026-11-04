@@ -167,6 +167,11 @@ public struct MenuBarPopoverView: View {
                     .controlSize(.small)
                     .help("Quit WebCam Controller")
                 }
+
+                Divider()
+
+                // 5. Bottom Version, Live Call Telemetry & GitHub Update Redirect
+                AppVersionFooterView(manager: manager, showStatusText: true)
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "web.camera")
@@ -191,6 +196,10 @@ public struct MenuBarPopoverView: View {
                     }
                     .controlSize(.small)
                 }
+
+                Divider()
+
+                AppVersionFooterView(manager: manager, showStatusText: true)
             }
         }
         .padding(12)

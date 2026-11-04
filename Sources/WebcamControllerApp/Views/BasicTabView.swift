@@ -72,6 +72,7 @@ public struct BasicTabView: View {
                             labelWidth: labelWidth,
                             state: camera.exposureTime,
                             isLockedByAuto: !camera.autoExposureMode.allowsManualExposureTime,
+                            formattedValue: camera.exposureTime.isSupported ? camera.exposureTime.formattedShutterShort : nil,
                             leftIcon: {
                                 Image(systemName: "stopwatch")
                                     .font(.system(size: 12))

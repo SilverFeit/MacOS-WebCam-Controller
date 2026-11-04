@@ -83,8 +83,17 @@ typedef enum {
     CUVC_VS_CODEC_FRAME_BASED  = 3
 } CUVCStreamCodec;
 
-#define CUVC_MAX_FPS_INTERVALS 16
-#define CUVC_MAX_STREAM_MODES  64
+#define CUVC_MAX_FPS_INTERVALS   16
+#define CUVC_MAX_STREAM_MODES    64
+#define CUVC_MAX_EXTENSION_UNITS 8
+
+/// Discovered UVC Vendor Extension Unit (VC_EXTENSION_UNIT = 0x06)
+typedef struct {
+    uint8_t  unitId;
+    uint8_t  controlCount;
+    uint8_t  guidBytes[16];
+    uint64_t controlsBitmap;
+} CUVCExtensionUnitInfo;
 
 /// Discovered USB UVC VideoStreaming Frame/Resolution Mode + Supported Frame Intervals
 typedef struct {
@@ -116,12 +125,15 @@ typedef struct {
     uint16_t vendorId;
     uint16_t productId;
     uint32_t locationId;
+    uint16_t firmwareBCD;
     uint16_t uvcVersionBCD;
     uint8_t  videoControlInterfaceNumber;
     int16_t  cameraTerminalId;
     int16_t  processingUnitId;
     uint32_t cameraTerminalControlsBitmap;
     uint32_t processingUnitControlsBitmap;
+    uint8_t  extensionUnitCount;
+    CUVCExtensionUnitInfo extensionUnits[CUVC_MAX_EXTENSION_UNITS];
     char     productName[256];
     char     vendorName[256];
     char     serialNumber[128];
@@ -145,6 +157,17 @@ CUVCDeviceHandle *cuvc_open_device(uint32_t locationId, uint16_t vendorId, uint1
 
 /// Retrieve metadata for an open handle.
 CUVCDeviceInfo cuvc_get_device_info(const CUVCDeviceHandle *handle);
+
+/// Retrieve the most recent IOKit IOReturn status code recorded by `handle` (0 == kIOReturnSuccess).
+int32_t cuvc_get_last_error(const CUVCDeviceHandle *handle);
+
+/// Copy the raw USB Configuration Descriptor bytes for diagnostic inspection (`describe --raw`).
+bool cuvc_copy_config_descriptor(
+    CUVCDeviceHandle *handle,
+    uint8_t *outBuffer,
+    uint32_t capacity,
+    uint32_t *outLength
+);
 
 /// Close and release IOKit interfaces for `handle`.
 void cuvc_close_device(CUVCDeviceHandle *handle);

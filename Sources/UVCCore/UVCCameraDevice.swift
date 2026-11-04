@@ -81,6 +81,7 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
             vendorId: 0x041e,
             productId: 0x40a3,
             locationId: 0x00110000,
+            firmwareBCD: 0x0214,
             uvcVersionBCD: 0x0150,
             videoControlInterfaceNumber: 0,
             cameraTerminalId: 1,
@@ -179,6 +180,29 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
             cuvc_close_device(h)
             handle = nil
         }
+    }
+
+    public func copyRawConfigurationDescriptor() -> [UInt8]? {
+        guard let h = handle else { return nil }
+        var buf = [UInt8](repeating: 0, count: 8192)
+        var outLen: UInt32 = 0
+        if cuvc_copy_config_descriptor(h, &buf, UInt32(buf.count), &outLen), outLen > 0 {
+            return Array(buf.prefix(Int(outLen)))
+        }
+        if outLen > UInt32(buf.count), outLen <= 65536 {
+            buf = [UInt8](repeating: 0, count: Int(outLen))
+            if cuvc_copy_config_descriptor(h, &buf, UInt32(buf.count), &outLen), outLen > 0 {
+                return Array(buf.prefix(Int(outLen)))
+            }
+        }
+        return nil
+    }
+
+    public var lastHardwareErrorDescription: String? {
+        guard let h = handle else { return nil }
+        let code = cuvc_get_last_error(h)
+        guard code != 0 else { return nil }
+        return DiagnosticsLogger.ioReturnDescription(code)
     }
 
     deinit {
@@ -509,6 +533,11 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
             state.minimum = 0
             state.maximum = 2
             state.step = 1
+        }
+        // "Auto" anti-flicker (value 3) was introduced in UVC 1.5; UVC 1.0/1.1 cameras often stall
+        // Endpoint 0 if sent 3 even when GET_MAX reports 3.
+        if state.isSupported && identity.uvcVersionBCD > 0 && identity.uvcVersionBCD < 0x0150 {
+            state.maximum = min(state.maximum, 2)
         }
         return state
     }

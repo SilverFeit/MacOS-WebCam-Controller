@@ -7,6 +7,10 @@ struct WebcamControllerMain {
     @MainActor
     static func main() {
         let args = CommandLine.arguments
+        if args.contains("--version") || args.contains("-v") {
+            print("MacOS WebCam Controller v\(AppBuildInfo.currentVersion)")
+            return
+        }
         if args.contains("--dump-hardware") {
             runHardwareDiagnosticDump()
             return

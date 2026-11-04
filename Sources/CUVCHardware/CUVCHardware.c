@@ -32,6 +32,7 @@ struct CUVCDeviceHandle {
     CUVCDeviceInfo info;
     IOUSBDeviceInterface **deviceInterface;
     IOUSBInterfaceInterface220 **controlInterface;
+    int32_t lastError;
 };
 
 struct CUVCHotplugWatcher {
@@ -129,6 +130,36 @@ static void parse_uvc_subdescriptor(const uint8_t *bytes, size_t len, CUVCDevice
                 info->processingUnitControlsBitmap = bitmap;
             }
         }
+    } else if (subType == UVC_VC_EXTENSION_UNIT && len >= 24) {
+        uint8_t unitId = bytes[3];
+        uint8_t numControls = bytes[20];
+        uint8_t numInputPins = bytes[21];
+        size_t sizeIdx = (size_t)(22 + numInputPins);
+        if (sizeIdx < len && info->extensionUnitCount < CUVC_MAX_EXTENSION_UNITS) {
+            // Avoid duplicates if walked twice
+            bool alreadyPresent = false;
+            for (uint8_t e = 0; e < info->extensionUnitCount; e++) {
+                if (info->extensionUnits[e].unitId == unitId) {
+                    alreadyPresent = true;
+                    break;
+                }
+            }
+            if (!alreadyPresent) {
+                uint8_t ctrlSize = bytes[sizeIdx];
+                if (sizeIdx + 1 + ctrlSize <= len) {
+                    CUVCExtensionUnitInfo *xu = &info->extensionUnits[info->extensionUnitCount++];
+                    memset(xu, 0, sizeof(*xu));
+                    xu->unitId = unitId;
+                    xu->controlCount = numControls;
+                    memcpy(xu->guidBytes, bytes + 4, 16);
+                    uint64_t bitmap = 0;
+                    for (uint8_t i = 0; i < ctrlSize && i < 8; i++) {
+                        bitmap |= ((uint64_t)bytes[sizeIdx + 1 + i] << (i * 8));
+                    }
+                    xu->controlsBitmap = bitmap;
+                }
+            }
+        }
     }
 }
 
@@ -151,6 +182,9 @@ static bool inspect_uvc_service(
     }
     if (read_cfnumber_int64(usbDeviceService, CFSTR(kUSBDevicePropertyLocationID), &val)) {
         outInfo->locationId = (uint32_t)(val & 0xFFFFFFFFu);
+    }
+    if (read_cfnumber_int64(usbDeviceService, CFSTR("bcdDevice"), &val)) {
+        outInfo->firmwareBCD = (uint16_t)(val & 0xFFFF);
     }
 
     if (!read_cfstring_property(usbDeviceService, CFSTR("USB Product Name"), outInfo->productName, sizeof(outInfo->productName)) &&
@@ -193,6 +227,12 @@ static bool inspect_uvc_service(
     IODestroyPlugInInterface(devPlugIn);
     if (hr != 0 || !devIntf) {
         return false;
+    }
+    if (outInfo->firmwareBCD == 0) {
+        UInt16 relNum = 0;
+        if ((*devIntf)->GetDeviceReleaseNumber(devIntf, &relNum) == kIOReturnSuccess) {
+            outInfo->firmwareBCD = relNum;
+        }
     }
 
     IOUSBFindInterfaceRequest req = {
@@ -368,6 +408,36 @@ CUVCDeviceInfo cuvc_get_device_info(const CUVCDeviceHandle *handle) {
     return handle->info;
 }
 
+int32_t cuvc_get_last_error(const CUVCDeviceHandle *handle) {
+    if (!handle) return -1;
+    return handle->lastError;
+}
+
+bool cuvc_copy_config_descriptor(
+    CUVCDeviceHandle *handle,
+    uint8_t *outBuffer,
+    uint32_t capacity,
+    uint32_t *outLength
+) {
+    if (outLength) *outLength = 0;
+    if (!handle || !handle->deviceInterface || !outBuffer || capacity == 0) return false;
+
+    IOUSBConfigurationDescriptorPtr conf = NULL;
+    IOReturn kr = (*handle->deviceInterface)->GetConfigurationDescriptorPtr(handle->deviceInterface, 0, &conf);
+    handle->lastError = (int32_t)kr;
+    if (kr != kIOReturnSuccess || !conf) {
+        return false;
+    }
+
+    uint32_t totalLen = (uint32_t)OSSwapLittleToHostInt16(conf->wTotalLength);
+    if (outLength) *outLength = totalLen;
+    if (totalLen > capacity) {
+        return false;
+    }
+    memcpy(outBuffer, conf, totalLen);
+    return true;
+}
+
 void cuvc_close_device(CUVCDeviceHandle *handle) {
     if (!handle) return;
     if (handle->controlInterface) {
@@ -511,7 +581,51 @@ int cuvc_enumerate_stream_modes(
 
 static bool vs_ep0_request(CUVCDeviceHandle *handle, IOUSBDevRequest *req) {
     if (!handle || !handle->deviceInterface) return false;
+
+    // Try non-exclusive ControlRequest on the target VideoStreaming USB interface first
+    // (works cleanly while UVCAssistant / call apps hold the streaming interface), then fallback to DeviceRequest.
+    uint8_t targetIfc = (uint8_t)(req->wIndex & 0xFF);
+    IOUSBFindInterfaceRequest findReq = {
+        .bInterfaceClass = kUSBVideoInterfaceClass,
+        .bInterfaceSubClass = 0x02, // SC_VIDEOSTREAMING
+        .bInterfaceProtocol = kIOUSBFindInterfaceDontCare,
+        .bAlternateSetting = kIOUSBFindInterfaceDontCare
+    };
+    io_iterator_t iter = 0;
+    if ((*handle->deviceInterface)->CreateInterfaceIterator(handle->deviceInterface, &findReq, &iter) == kIOReturnSuccess && iter) {
+        io_service_t svc = 0;
+        while ((svc = IOIteratorNext(iter)) != 0) {
+            int64_t ifcNum = -1;
+            if (read_cfnumber_int64(svc, CFSTR("bInterfaceNumber"), &ifcNum) && (uint8_t)ifcNum == targetIfc) {
+                IOCFPlugInInterface **plug = NULL;
+                SInt32 score = 0;
+                if (IOCreatePlugInInterfaceForService(svc, kIOUSBInterfaceUserClientTypeID, kIOCFPlugInInterfaceID, &plug, &score) == kIOReturnSuccess && plug) {
+                    IOUSBInterfaceInterface **vsIntf = NULL;
+                    HRESULT hr = (*plug)->QueryInterface(plug, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID), (LPVOID *)&vsIntf);
+                    IODestroyPlugInInterface(plug);
+                    if (hr == 0 && vsIntf) {
+                        req->wLenDone = 0;
+                        IOReturn ifcKr = (*vsIntf)->ControlRequest(vsIntf, 0, req);
+                        (*vsIntf)->Release(vsIntf);
+                        if (ifcKr == kIOReturnSuccess) {
+                            handle->lastError = 0;
+                            IOObjectRelease(svc);
+                            IOObjectRelease(iter);
+                            return true;
+                        }
+                    }
+                }
+                IOObjectRelease(svc);
+                break;
+            }
+            IOObjectRelease(svc);
+        }
+        IOObjectRelease(iter);
+    }
+
+    req->wLenDone = 0;
     IOReturn kr = (*handle->deviceInterface)->DeviceRequest(handle->deviceInterface, req);
+    handle->lastError = (int32_t)kr;
     return (kr == kIOReturnSuccess);
 }
 
@@ -718,15 +832,19 @@ static bool perform_ep0_request(CUVCDeviceHandle *handle, IOUSBDevRequest *req) 
 
     IOReturn kr = (*handle->controlInterface)->ControlRequest(handle->controlInterface, 0, req);
     if (kr == kIOReturnSuccess) {
+        handle->lastError = 0;
         return true;
     }
 
     if (handle->deviceInterface) {
+        req->wLenDone = 0;
         kr = (*handle->deviceInterface)->DeviceRequest(handle->deviceInterface, req);
         if (kr == kIOReturnSuccess) {
+            handle->lastError = 0;
             return true;
         }
     }
+    handle->lastError = (int32_t)kr;
     return false;
 }
 

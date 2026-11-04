@@ -120,28 +120,10 @@ public struct WebcamSettingsPanelView: View {
                 Spacer()
             }
 
-            // Subtle Status Bar
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(manager.selectedCamera != nil ? Color.green : Color.orange)
-                    .frame(width: 6, height: 6)
-
-                Text(manager.statusMessage)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer()
-
-                if manager.isHardwareLockEnabled {
-                    Label("Locked", systemImage: "lock.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                }
-            }
-            .padding(.horizontal, 2)
+            // Bottom Status, Version & GitHub Update Bar
+            AppVersionFooterView(manager: manager, showStatusText: true)
         }
         .padding(14)
-        .frame(minWidth: 468, idealWidth: 472, minHeight: 620, idealHeight: 705)
+        .frame(minWidth: 468, idealWidth: 472, minHeight: 620, idealHeight: 716)
     }
 }

@@ -127,6 +127,115 @@ public struct NumericRangeControlState: Equatable, Sendable {
         let deg = Double(current) / 3600.0
         return String(format: "%+.1f°", deg)
     }
+
+    public var formattedShutterShort: String {
+        UVCValueFormatter.shutterShortLabel(units100us: current)
+    }
+
+    public var formattedZoomShort: String {
+        UVCValueFormatter.zoomShortLabel(current, minimum: minimum)
+    }
+}
+
+public enum UVCValueFormatter {
+    /// Formats UVC absolute exposure time (`100 µs` units) as photographic shutter speed (`1/60s`, `0.5s`).
+    public static func shutterShortLabel(units100us: Int) -> String {
+        guard units100us > 0 else { return "0s" }
+        let seconds = Double(units100us) / 10_000.0
+        if seconds >= 0.4 {
+            return String(format: "%.1fs", seconds)
+        }
+        let denom = max(1, Int((1.0 / seconds).rounded()))
+        return "1/\(denom)s"
+    }
+
+    /// Parses shutter input like `"1/60"`, `"1/60s"`, `"16.6ms"`, `"0.016s"`, or raw UVC `100 µs` integer `"166"`.
+    public static func parseShutterUnits(_ rawInput: String) -> Int? {
+        let s = rawInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !s.isEmpty else { return nil }
+        if let direct = Int(s) {
+            return direct
+        }
+        let withoutS = s.hasSuffix("s") && !s.hasSuffix("ms") ? String(s.dropLast()) : s
+        if withoutS.contains("/") {
+            let parts = withoutS.split(separator: "/", maxSplits: 1).map(String.init)
+            if parts.count == 2, let num = Double(parts[0]), let den = Double(parts[1]), num > 0, den > 0 {
+                let sec = num / den
+                return max(1, Int((sec * 10_000.0).rounded()))
+            }
+        }
+        if s.hasSuffix("ms"), let ms = Double(s.dropLast(2)), ms > 0 {
+            return max(1, Int((ms * 10.0).rounded()))
+        }
+        if s.hasSuffix("s"), let sec = Double(withoutS), sec > 0 {
+            return max(1, Int((sec * 10_000.0).rounded()))
+        }
+        return nil
+    }
+
+    public static func zoomShortLabel(_ value: Int, minimum: Int) -> String {
+        if minimum == 100 && value >= 100 {
+            return String(format: "%.1f×", Double(value) / 100.0)
+        }
+        return "\(value)"
+    }
+}
+
+public struct UVCExtensionUnit: Equatable, Hashable, Sendable, Codable, Identifiable {
+    public var id: UInt8 { unitId }
+    public let unitId: UInt8
+    public let controlCount: UInt8
+    public let guidString: String
+    public let controlsBitmap: UInt64
+
+    public init(unitId: UInt8, controlCount: UInt8, guidString: String, controlsBitmap: UInt64) {
+        self.unitId = unitId
+        self.controlCount = controlCount
+        self.guidString = guidString
+        self.controlsBitmap = controlsBitmap
+    }
+
+    public init(cUnit: CUVCExtensionUnitInfo) {
+        let g = cUnit.guidBytes
+        let bytes: [UInt8] = [
+            g.0, g.1, g.2, g.3, g.4, g.5, g.6, g.7,
+            g.8, g.9, g.10, g.11, g.12, g.13, g.14, g.15
+        ]
+        // USB UVC GUID stores first 3 fields little-endian
+        let ordered: [UInt8] = [
+            bytes[3], bytes[2], bytes[1], bytes[0],
+            bytes[5], bytes[4],
+            bytes[7], bytes[6],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ]
+        let uuid = UUID(uuid: (
+            ordered[0], ordered[1], ordered[2], ordered[3],
+            ordered[4], ordered[5], ordered[6], ordered[7],
+            ordered[8], ordered[9], ordered[10], ordered[11],
+            ordered[12], ordered[13], ordered[14], ordered[15]
+        ))
+        self.unitId = cUnit.unitId
+        self.controlCount = cUnit.controlCount
+        self.guidString = uuid.uuidString
+        self.controlsBitmap = cUnit.controlsBitmap
+    }
+
+    public var knownVendorTitle: String? {
+        switch guidString.uppercased() {
+        case "69678EE4-410F-40DB-A850-7420D7D8240E":
+            return "Vendor Device Information XU"
+        case "49E40215-F434-47FE-B158-0E885023E51B":
+            return "Vendor Video Pipe XU"
+        case "FFE52D21-8030-4E2C-82D9-F587D00540BD":
+            return "Vendor Peripheral Control XU"
+        case "63610682-5070-49AB-B8CC-B3855E8D221D":
+            return "Vendor Video Extension XU"
+        case "63610682-5070-49AB-B8CC-B3855E8D2256":
+            return "Vendor Hardware Control XU"
+        default:
+            return nil
+        }
+    }
 }
 
 public struct BooleanControlState: Equatable, Sendable {
@@ -188,10 +297,12 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
     public let vendorId: UInt16
     public let productId: UInt16
     public let locationId: UInt32
+    public let firmwareBCD: UInt16
     public let uvcVersionBCD: UInt16
     public let videoControlInterfaceNumber: UInt8
     public let cameraTerminalId: Int16
     public let processingUnitId: Int16
+    public let extensionUnits: [UVCExtensionUnit]
     public let productName: String
     public let vendorName: String
     public let serialNumber: String
@@ -200,10 +311,12 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
         vendorId: UInt16,
         productId: UInt16,
         locationId: UInt32,
+        firmwareBCD: UInt16 = 0,
         uvcVersionBCD: UInt16,
         videoControlInterfaceNumber: UInt8,
         cameraTerminalId: Int16,
         processingUnitId: Int16,
+        extensionUnits: [UVCExtensionUnit] = [],
         productName: String,
         vendorName: String,
         serialNumber: String
@@ -211,10 +324,12 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
         self.vendorId = vendorId
         self.productId = productId
         self.locationId = locationId
+        self.firmwareBCD = firmwareBCD
         self.uvcVersionBCD = uvcVersionBCD
         self.videoControlInterfaceNumber = videoControlInterfaceNumber
         self.cameraTerminalId = cameraTerminalId
         self.processingUnitId = processingUnitId
+        self.extensionUnits = extensionUnits
         self.productName = productName
         self.vendorName = vendorName
         self.serialNumber = serialNumber
@@ -237,16 +352,31 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
             }
         }
 
+        let xuCount = min(Int(cInfo.extensionUnitCount), Int(CUVC_MAX_EXTENSION_UNITS))
+        let allRawXUs: [CUVCExtensionUnitInfo] = [
+            cInfo.extensionUnits.0, cInfo.extensionUnits.1,
+            cInfo.extensionUnits.2, cInfo.extensionUnits.3,
+            cInfo.extensionUnits.4, cInfo.extensionUnits.5,
+            cInfo.extensionUnits.6, cInfo.extensionUnits.7
+        ]
+        let parsedXUs = allRawXUs.prefix(xuCount).map { UVCExtensionUnit(cUnit: $0) }
+
         self.vendorId = cInfo.vendorId
         self.productId = cInfo.productId
         self.locationId = cInfo.locationId
+        self.firmwareBCD = cInfo.firmwareBCD
         self.uvcVersionBCD = cInfo.uvcVersionBCD
         self.videoControlInterfaceNumber = cInfo.videoControlInterfaceNumber
         self.cameraTerminalId = cInfo.cameraTerminalId
         self.processingUnitId = cInfo.processingUnitId
+        self.extensionUnits = parsedXUs
         self.productName = prod.isEmpty ? String(format: "USB Camera (0x%04x:0x%04x)", cInfo.vendorId, cInfo.productId) : prod
         self.vendorName = vend
         self.serialNumber = serial
+    }
+
+    public var firmwareHex: String {
+        String(format: "0x%04x", firmwareBCD)
     }
 
     /// Hardware model key `vvvv:pppp` (matches across USB ports)
