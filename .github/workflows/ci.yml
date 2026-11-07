@@ -10,7 +10,10 @@ on:
 jobs:
   build-and-test:
     name: Build App, CLI & Run Tests (macOS arm64)
-    runs-on: macos-14
+    # macos-14 was retired on 2026-11-02. Jobs that still request it are
+    # cancelled immediately: "The configuration 'macos-14-arm64-us-default' is not supported".
+    # macos-15 is a GitHub-hosted Apple Silicon image and ships Swift 6.
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

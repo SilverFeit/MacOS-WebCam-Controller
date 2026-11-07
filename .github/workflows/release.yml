@@ -10,7 +10,9 @@ permissions:
 jobs:
   release:
     name: Build, Verify & Publish Release
-    runs-on: macos-14
+    # Same retired macos-14 image as CI. This workflow only runs on version tags,
+    # so an ordinary push to main does not start or cancel the CI check.
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
