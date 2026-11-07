@@ -51,6 +51,10 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
     @Published public private(set) var isHardwareStreamingActive: Bool = false
     @Published public private(set) var streamStatusNote: String = ""
 
+    // MARK: - Vendor Extension Unit (XU) Controls
+    public private(set) var vendorProfile: VendorProfile?
+    @Published public private(set) var vendorControls: [VendorXUControlState] = []
+
     /// Desired user-configured state for Anti-Reset Hardware Lock
     public private(set) var lockedTargetSnapshot = CameraSettingsSnapshot()
 
@@ -253,6 +257,8 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
         } else {
             refreshActiveStreamState(preserveUserSelection: true)
         }
+
+        probeVendorControls()
 
         if syncLockedTarget {
             lockedTargetSnapshot = captureSnapshot()
@@ -655,14 +661,20 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
 
     @discardableResult
     public func setAutoExposureMode(_ mode: AutoExposureMode) -> Bool {
-        guard let h = handle, autoExposureMode.isSupported, autoExposureMode.isModeSupported(mode) else { return false }
-        let ok = cuvc_set_int(h, ctUnit, UInt8(CUVC_CT_AE_MODE_CONTROL.rawValue), 1, false, Int64(mode.rawValue))
+        guard autoExposureMode.isSupported, autoExposureMode.isModeSupported(mode) else { return false }
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_int(h, ctUnit, UInt8(CUVC_CT_AE_MODE_CONTROL.rawValue), 1, false, Int64(mode.rawValue))
+        } else {
+            ok = true
+        }
         if ok {
             autoExposureMode.current = mode
             lockedTargetSnapshot.autoExposureMode = mode.rawValue
             // Read back current exposure time so manual slider starts at exact live shutter value
             var expCur: Int64 = 0
-            if exposureTime.isSupported,
+            if let h = handle,
+               exposureTime.isSupported,
                cuvc_get_int(h, UInt8(CUVC_REQ_GET_CUR.rawValue), ctUnit, UInt8(CUVC_CT_EXPOSURE_TIME_ABSOLUTE_CONTROL.rawValue), 4, false, &expCur) {
                 exposureTime.current = Int(expCur)
                 if mode.allowsManualExposureTime {
@@ -850,9 +862,14 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
 
     @discardableResult
     public func setPanAbsolute(_ value: Int) -> Bool {
-        guard let h = handle, panAbsolute.isSupported else { return false }
+        guard panAbsolute.isSupported, panAbsolute.canSet else { return false }
         let snappedPan = panAbsolute.clampedAndSnapped(value)
-        let ok = cuvc_set_pantilt(h, ctUnit, Int32(snappedPan), Int32(tiltAbsolute.current))
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_pantilt(h, ctUnit, Int32(snappedPan), Int32(tiltAbsolute.current))
+        } else {
+            ok = true
+        }
         if ok {
             panAbsolute.current = snappedPan
             lockedTargetSnapshot.panAbsolute = snappedPan
@@ -862,12 +879,43 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
 
     @discardableResult
     public func setTiltAbsolute(_ value: Int) -> Bool {
-        guard let h = handle, tiltAbsolute.isSupported else { return false }
+        guard tiltAbsolute.isSupported, tiltAbsolute.canSet else { return false }
         let snappedTilt = tiltAbsolute.clampedAndSnapped(value)
-        let ok = cuvc_set_pantilt(h, ctUnit, Int32(panAbsolute.current), Int32(snappedTilt))
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_pantilt(h, ctUnit, Int32(panAbsolute.current), Int32(snappedTilt))
+        } else {
+            ok = true
+        }
         if ok {
             tiltAbsolute.current = snappedTilt
             lockedTargetSnapshot.tiltAbsolute = snappedTilt
+        }
+        return ok
+    }
+
+    @discardableResult
+    public func setPanTiltAbsolute(pan: Int, tilt: Int) -> Bool {
+        guard (panAbsolute.isSupported && panAbsolute.canSet) || (tiltAbsolute.isSupported && tiltAbsolute.canSet) else {
+            return false
+        }
+        let snappedPan = panAbsolute.isSupported ? panAbsolute.clampedAndSnapped(pan) : panAbsolute.current
+        let snappedTilt = tiltAbsolute.isSupported ? tiltAbsolute.clampedAndSnapped(tilt) : tiltAbsolute.current
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_pantilt(h, ctUnit, Int32(snappedPan), Int32(snappedTilt))
+        } else {
+            ok = true
+        }
+        if ok {
+            if panAbsolute.isSupported {
+                panAbsolute.current = snappedPan
+                lockedTargetSnapshot.panAbsolute = snappedPan
+            }
+            if tiltAbsolute.isSupported {
+                tiltAbsolute.current = snappedTilt
+                lockedTargetSnapshot.tiltAbsolute = snappedTilt
+            }
         }
         return ok
     }
@@ -911,9 +959,14 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
         bytes: UInt8,
         signed: Bool
     ) -> Bool {
-        guard let h = handle, state.isSupported, state.canSet else { return false }
+        guard state.isSupported, state.canSet else { return false }
         let snapped = state.clampedAndSnapped(rawValue)
-        let ok = cuvc_set_int(h, unit, selector, bytes, signed, Int64(snapped))
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_int(h, unit, selector, bytes, signed, Int64(snapped))
+        } else {
+            ok = true
+        }
         if ok {
             state.current = snapped
         }
@@ -926,8 +979,13 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
         unit: UInt8,
         selector: UInt8
     ) -> Bool {
-        guard let h = handle, state.isSupported, state.canSet else { return false }
-        let ok = cuvc_set_int(h, unit, selector, 1, false, value ? 1 : 0)
+        guard state.isSupported, state.canSet else { return false }
+        let ok: Bool
+        if let h = handle {
+            ok = cuvc_set_int(h, unit, selector, 1, false, value ? 1 : 0)
+        } else {
+            ok = true
+        }
         if ok {
             state.current = value
         }
@@ -1121,8 +1179,339 @@ public final class UVCCameraDevice: ObservableObject, Identifiable {
         if rollAbsolute.isSupported { _ = setRollAbsolute(rollAbsolute.defaultValue) }
         if scanningMode.isSupported { _ = setScanningMode(scanningMode.defaultValue) }
         if privacy.isSupported { _ = setPrivacy(privacy.defaultValue) }
+        for v in vendorControls where v.isSupported && v.canSet {
+            _ = setVendorControl(id: v.id, value: v.defaultValue)
+        }
 
         refreshAllFromHardware(syncLockedTarget: true)
+    }
+
+    /// Resets optical framing (Zoom, Digital Multiplier, Pan, Tilt, Roll) to hardware defaults.
+    public func resetViewToDefaults() {
+        if zoomAbsolute.isSupported { _ = setZoomAbsolute(zoomAbsolute.defaultValue) }
+        if digitalMultiplier.isSupported { _ = setDigitalMultiplier(digitalMultiplier.defaultValue) }
+        if panAbsolute.isSupported || tiltAbsolute.isSupported {
+            _ = setPanTiltAbsolute(pan: panAbsolute.defaultValue, tilt: tiltAbsolute.defaultValue)
+        }
+        if rollAbsolute.isSupported { _ = setRollAbsolute(rollAbsolute.defaultValue) }
+    }
+
+    /// Resets image-processing controls (Exposure, Gain, Brightness, Contrast, Saturation, Sharpness, Gamma, Hue, White Balance, Backlight) to hardware defaults.
+    public func resetImageToDefaults() {
+        if autoExposureMode.isSupported {
+            if autoExposureMode.isModeSupported(.manual) {
+                _ = setAutoExposureMode(.manual)
+                usleep(4_000)
+                if exposureTime.isSupported { _ = setExposureTime(exposureTime.defaultValue) }
+                if irisAbsolute.isSupported { _ = setIrisAbsolute(irisAbsolute.defaultValue) }
+            }
+            _ = setAutoExposureMode(autoExposureMode.defaultMode)
+        }
+        if autoExposurePriority.isSupported { _ = setAutoExposurePriority(autoExposurePriority.defaultValue) }
+        if gain.isSupported { _ = setGain(gain.defaultValue) }
+        if brightness.isSupported { _ = setBrightness(brightness.defaultValue) }
+        if contrastAuto.isSupported { _ = setContrastAuto(contrastAuto.defaultValue) }
+        if contrast.isSupported { _ = setContrast(contrast.defaultValue) }
+        if hueAuto.isSupported { _ = setHueAuto(hueAuto.defaultValue) }
+        if hue.isSupported { _ = setHue(hue.defaultValue) }
+        if saturation.isSupported { _ = setSaturation(saturation.defaultValue) }
+        if sharpness.isSupported { _ = setSharpness(sharpness.defaultValue) }
+        if gamma.isSupported { _ = setGamma(gamma.defaultValue) }
+
+        if whiteBalanceAuto.isSupported {
+            _ = setWhiteBalanceAuto(false)
+            usleep(4_000)
+            if whiteBalanceTemperature.isSupported {
+                _ = setWhiteBalanceTemperature(whiteBalanceTemperature.defaultValue)
+            }
+            _ = setWhiteBalanceAuto(whiteBalanceAuto.defaultValue)
+        } else if whiteBalanceTemperature.isSupported {
+            _ = setWhiteBalanceTemperature(whiteBalanceTemperature.defaultValue)
+        }
+
+        if backlightCompensation.isSupported { _ = setBacklightCompensation(backlightCompensation.defaultValue) }
+    }
+
+    /// Applies a natural-language or keyword look phrase (e.g. `"warmer, more contrast"`, `"black and white"`, `"natural"`).
+    @discardableResult
+    public func applyLook(_ phrase: String) -> String {
+        let steps = LookAdjustment.parse(phrase)
+        guard !steps.isEmpty else {
+            return "Unrecognized look phrase: '\(phrase)'"
+        }
+
+        var appliedLabels: [String] = []
+        for step in steps {
+            switch step.operation {
+            case .resetImage:
+                resetImageToDefaults()
+                appliedLabels.append("natural image defaults")
+            case .resetView:
+                resetViewToDefaults()
+                appliedLabels.append("reset view")
+            case let .normalized(fraction):
+                guard let ctrl = step.control else { continue }
+                if applyNormalizedOrRelative(ctrl, normalized: fraction, deltaFraction: nil) {
+                    appliedLabels.append(step.label)
+                }
+            case let .relativeFraction(delta):
+                guard let ctrl = step.control else { continue }
+                if applyNormalizedOrRelative(ctrl, normalized: nil, deltaFraction: delta) {
+                    appliedLabels.append(step.label)
+                }
+            }
+        }
+
+        if appliedLabels.isEmpty {
+            return "Camera does not support requested look controls"
+        }
+        return "Applied look: " + appliedLabels.joined(separator: ", ")
+    }
+
+    private func applyNormalizedOrRelative(_ control: LookAdjustment.TargetControl, normalized: Double?, deltaFraction: Double?) -> Bool {
+        func computeTarget(_ state: NumericRangeControlState) -> Int {
+            let span = Double(max(1, state.maximum - state.minimum))
+            if let norm = normalized {
+                let raw = Double(state.minimum) + span * min(max(norm, 0.0), 1.0)
+                return state.clampedAndSnapped(Int(raw.rounded()))
+            }
+            if let delta = deltaFraction {
+                let stepShift = max(Double(state.step), (span * abs(delta)).rounded()) * (delta >= 0 ? 1.0 : -1.0)
+                return state.clampedAndSnapped(state.current + Int(stepShift))
+            }
+            return state.current
+        }
+
+        switch control {
+        case .brightness:
+            guard brightness.isSupported else { return false }
+            return setBrightness(computeTarget(brightness))
+        case .contrast:
+            guard contrast.isSupported else { return false }
+            if contrastAuto.isSupported && contrastAuto.current { _ = setContrastAuto(false) }
+            return setContrast(computeTarget(contrast))
+        case .saturation:
+            guard saturation.isSupported else { return false }
+            return setSaturation(computeTarget(saturation))
+        case .sharpness:
+            guard sharpness.isSupported else { return false }
+            return setSharpness(computeTarget(sharpness))
+        case .whiteBalanceTemperature:
+            guard whiteBalanceTemperature.isSupported else { return false }
+            if whiteBalanceAuto.isSupported && whiteBalanceAuto.current {
+                _ = setWhiteBalanceAuto(false)
+                usleep(4_000)
+            }
+            return setWhiteBalanceTemperature(computeTarget(whiteBalanceTemperature))
+        case .backlight:
+            guard backlightCompensation.isSupported else { return false }
+            return setBacklightCompensation(computeTarget(backlightCompensation))
+        case .zoom:
+            if zoomAbsolute.isSupported {
+                return setZoomAbsolute(computeTarget(zoomAbsolute))
+            } else if digitalMultiplier.isSupported {
+                return setDigitalMultiplier(computeTarget(digitalMultiplier))
+            }
+            return false
+        }
+    }
+
+    // MARK: - Vendor Extension Unit (XU) Probing & Control
+
+    public func probeVendorControls() {
+        let profile = VendorProfileRegistry.matchingProfile(for: identity)
+        self.vendorProfile = profile
+        guard let profile else {
+            vendorControls = []
+            return
+        }
+
+        var results: [VendorXUControlState] = []
+        for spec in profile.controls {
+            guard let unitID = resolveVendorUnitID(for: spec) else { continue }
+            if let state = probeSingleVendorControl(spec: spec, unitID: unitID) {
+                results.append(state)
+            }
+        }
+        vendorControls = results
+    }
+
+    private func resolveVendorUnitID(for spec: VendorProfile.ControlSpec) -> UInt8? {
+        if let guid = spec.unitGUID?.lowercased(),
+           let matched = identity.extensionUnits.first(where: { $0.guidString.lowercased() == guid }) {
+            return matched.unitId
+        }
+        if let uid = spec.unitID {
+            if identity.extensionUnits.isEmpty || identity.extensionUnits.contains(where: { $0.unitId == uid }) {
+                return uid
+            }
+        }
+        return spec.unitID
+    }
+
+    private func probeSingleVendorControl(spec: VendorProfile.ControlSpec, unitID: UInt8) -> VendorXUControlState? {
+        guard let h = handle else { return nil }
+        let len = UInt16(spec.length ?? defaultPayloadLength(for: spec.encoding))
+        guard len > 0 && len <= 64 else { return nil }
+
+        var curBuf = [UInt8](repeating: 0, count: Int(len))
+        var outAct: UInt16 = 0
+        let hasCur = cuvc_get_control_bytes(
+            h,
+            UInt8(CUVC_REQ_GET_CUR.rawValue),
+            unitID,
+            spec.selector,
+            &curBuf,
+            len,
+            &outAct
+        )
+        guard hasCur else { return nil }
+
+        var defBuf = curBuf
+        _ = cuvc_get_control_bytes(
+            h,
+            UInt8(CUVC_REQ_GET_DEF.rawValue),
+            unitID,
+            spec.selector,
+            &defBuf,
+            len,
+            &outAct
+        )
+
+        let curVal = decodeVendorValue(spec: spec, bytes: curBuf)
+        let defVal = spec.naturalDefault ?? decodeVendorValue(spec: spec, bytes: defBuf)
+        let minVal = spec.min ?? 0
+        let maxVal = spec.max ?? (spec.kind == .toggle ? 1 : max(1, curVal))
+        let stepVal = max(1, spec.step ?? 1)
+
+        return VendorXUControlState(
+            spec: spec,
+            resolvedUnitID: unitID,
+            isSupported: true,
+            canSet: true,
+            minimum: minVal,
+            maximum: maxVal,
+            step: stepVal,
+            defaultValue: defVal,
+            current: curVal
+        )
+    }
+
+    @discardableResult
+    public func setVendorControl(id: String, value: Int) -> Bool {
+        guard let idx = vendorControls.firstIndex(where: { $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
+            return false
+        }
+        var state = vendorControls[idx]
+        guard state.isSupported, state.canSet else { return false }
+        let clamped = min(max(value, state.minimum), state.maximum)
+
+        if let h = handle {
+            let spec = state.spec
+            let len = UInt16(spec.length ?? defaultPayloadLength(for: spec.encoding))
+            var buf = [UInt8](repeating: 0, count: Int(len))
+            var outAct: UInt16 = 0
+            // Read current buffer first for bitfield / offset encodings
+            _ = cuvc_get_control_bytes(
+                h,
+                UInt8(CUVC_REQ_GET_CUR.rawValue),
+                state.resolvedUnitID,
+                spec.selector,
+                &buf,
+                len,
+                &outAct
+            )
+            encodeVendorValue(clamped, spec: spec, into: &buf)
+            guard cuvc_set_control_bytes(
+                h,
+                state.resolvedUnitID,
+                spec.selector,
+                &buf,
+                len
+            ) else {
+                return false
+            }
+        }
+
+        state.current = clamped
+        vendorControls[idx] = state
+        return true
+    }
+
+    private func defaultPayloadLength(for encoding: VendorProfile.EncodingKind) -> Int {
+        switch encoding {
+        case .u8: return 1
+        case .u16le, .i16le, .bitInU16le: return 2
+        case .u8AtOffset: return 2
+        case .u16leAtOffset: return 4
+        }
+    }
+
+    private func decodeVendorValue(spec: VendorProfile.ControlSpec, bytes: [UInt8]) -> Int {
+        switch spec.encoding {
+        case .u8:
+            return bytes.first.map(Int.init) ?? 0
+        case .u16le:
+            guard bytes.count >= 2 else { return 0 }
+            return Int(UInt16(bytes[0]) | (UInt16(bytes[1]) << 8))
+        case .i16le:
+            guard bytes.count >= 2 else { return 0 }
+            let raw = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
+            return Int(Int16(bitPattern: raw))
+        case .bitInU16le:
+            guard bytes.count >= 2 else { return 0 }
+            let raw = Int(UInt16(bytes[0]) | (UInt16(bytes[1]) << 8))
+            let bit = spec.bit ?? 0
+            return (raw >> bit) & 1
+        case .u8AtOffset:
+            let off = spec.offset ?? 0
+            guard bytes.indices.contains(off) else { return 0 }
+            return Int(bytes[off])
+        case .u16leAtOffset:
+            let off = spec.offset ?? 0
+            guard bytes.count >= off + 2 else { return 0 }
+            return Int(UInt16(bytes[off]) | (UInt16(bytes[off + 1]) << 8))
+        }
+    }
+
+    private func encodeVendorValue(_ value: Int, spec: VendorProfile.ControlSpec, into bytes: inout [UInt8]) {
+        switch spec.encoding {
+        case .u8:
+            if !bytes.isEmpty { bytes[0] = UInt8(clamping: value) }
+        case .u16le:
+            if bytes.count >= 2 {
+                let u = UInt16(clamping: value)
+                bytes[0] = UInt8(u & 0xFF)
+                bytes[1] = UInt8((u >> 8) & 0xFF)
+            }
+        case .i16le:
+            if bytes.count >= 2 {
+                let s = Int16(clamping: value)
+                let u = UInt16(bitPattern: s)
+                bytes[0] = UInt8(u & 0xFF)
+                bytes[1] = UInt8((u >> 8) & 0xFF)
+            }
+        case .bitInU16le:
+            if bytes.count >= 2 {
+                var u = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
+                let mask = UInt16(1 << (spec.bit ?? 0))
+                if value != 0 { u |= mask } else { u &= ~mask }
+                bytes[0] = UInt8(u & 0xFF)
+                bytes[1] = UInt8((u >> 8) & 0xFF)
+            }
+        case .u8AtOffset:
+            let off = spec.offset ?? 0
+            if bytes.indices.contains(off) {
+                bytes[off] = UInt8(clamping: value)
+            }
+        case .u16leAtOffset:
+            let off = spec.offset ?? 0
+            if bytes.count >= off + 2 {
+                let u = UInt16(clamping: value)
+                bytes[off] = UInt8(u & 0xFF)
+                bytes[off + 1] = UInt8((u >> 8) & 0xFF)
+            }
+        }
     }
 
     /// Checks live hardware registers against `lockedTargetSnapshot` and re-injects any drifted values

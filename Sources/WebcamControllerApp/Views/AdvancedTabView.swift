@@ -1,11 +1,14 @@
+import AppKit
 import SwiftUI
 import UVCCore
 
 public struct AdvancedTabView: View {
     @ObservedObject var camera: UVCCameraDevice
+    var manager: CameraManager?
 
-    public init(camera: UVCCameraDevice) {
+    public init(camera: UVCCameraDevice, manager: CameraManager? = nil) {
         self.camera = camera
+        self.manager = manager
     }
 
     private var activeZoomState: NumericRangeControlState {
@@ -253,8 +256,12 @@ public struct AdvancedTabView: View {
                 }
             }
 
-            // 5. PTZ & Optical Controls (Zoom, Pan, Tilt + Windows UVC Iris/Roll/Privacy)
+            // 5. PTZ & Optical Controls (2D Framing Pad + Zoom, Pan, Tilt + Windows UVC Iris/Roll/Privacy)
             VStack(alignment: .leading, spacing: 8) {
+                if camera.panAbsolute.isSupported || camera.tiltAbsolute.isSupported || activeZoomState.isSupported {
+                    FramingPadView(camera: camera)
+                }
+
                 PanelSliderRow(
                     label: "Zoom",
                     labelWidth: 68,
@@ -399,6 +406,121 @@ public struct AdvancedTabView: View {
                 }
             }
             .padding(.horizontal, 4)
+
+            // 6. Vendor Extension Unit (XU) Controls (when matched by VendorProfile)
+            if !camera.vendorControls.isEmpty {
+                vendorExtensionSection
+            }
+
+            // 7. Network WebSocket Remote Control (quick access in Advanced + full config in Preferences)
+            if let mgr = manager {
+                webSocketQuickSection(mgr)
+            }
+
+            // 8. Project license (from the repository's LICENSE)
+            LicenseFooterView()
+        }
+    }
+
+    @ViewBuilder
+    private var vendorExtensionSection: some View {
+        PanelGroupBox(camera.vendorProfile.map { "Vendor Extension Controls (\($0.name))" } ?? "Vendor Extension Controls") {
+            ForEach(camera.vendorControls) { vc in
+                HStack(spacing: 8) {
+                    Text(vc.name)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 140, alignment: .leading)
+
+                    if vc.spec.kind == .toggle {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { vc.current != 0 },
+                                set: { _ = camera.setVendorControl(id: vc.id, value: $0 ? 1 : 0) }
+                            )
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                    } else if vc.spec.kind == .choice, let opts = vc.spec.options {
+                        HardwareSegmentedBar(
+                            options: opts.map { SegmentedOptionItem(id: $0.value, title: $0.label, isEnabled: true) },
+                            selectedID: vc.current,
+                            isControlSupported: vc.isSupported,
+                            compact: true
+                        ) { chosen in
+                            _ = camera.setVendorControl(id: vc.id, value: chosen)
+                        }
+                    } else {
+                        Slider(
+                            value: Binding(
+                                get: { Double(vc.current) },
+                                set: { _ = camera.setVendorControl(id: vc.id, value: Int($0.rounded())) }
+                            ),
+                            in: Double(vc.minimum)...Double(max(vc.minimum + 1, vc.maximum))
+                        )
+                        .controlSize(.small)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    RollbackIconButton(
+                        isEnabled: vc.canSet,
+                        isModified: vc.isModifiedFromDefault,
+                        helpText: "Rollback \(vc.name) to default"
+                    ) {
+                        _ = camera.setVendorControl(id: vc.id, value: vc.defaultValue)
+                    }
+
+                    Text(vc.formattedValue)
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(vc.isModifiedFromDefault ? Color.accentColor : Color.secondary)
+                        .frame(minWidth: 36, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func webSocketQuickSection(_ mgr: CameraManager) -> some View {
+        let wsURL = mgr.webSocketServer.displayEndpointURL(allowLAN: mgr.webSocketAllowLAN)
+        PanelGroupBox("Network WebSocket Control (Remote Camera API)") {
+            HStack(spacing: 8) {
+                Toggle(
+                    isOn: Binding(
+                        get: { mgr.webSocketEnabled },
+                        set: { mgr.webSocketEnabled = $0 }
+                    )
+                ) {
+                    Text("WebSocket Server")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .toggleStyle(.checkbox)
+
+                Circle()
+                    .fill(mgr.webSocketEnabled ? Color.green : Color.secondary.opacity(0.4))
+                    .frame(width: 6, height: 6)
+
+                Text(wsURL)
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(mgr.webSocketEnabled ? Color.accentColor : .secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Button("Copy ws://") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(wsURL, forType: .string)
+                    mgr.statusMessage = "Copied \(wsURL)"
+                }
+                .controlSize(.mini)
+
+                Button("Network Settings…") {
+                    mgr.activePanelTab = .preferences
+                }
+                .controlSize(.mini)
+            }
         }
     }
 

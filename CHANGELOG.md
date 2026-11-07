@@ -4,6 +4,28 @@ All notable changes to **MacOS WebCam Controller** are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-06
+
+### Added
+- **WebSocket Remote Network Camera Control (`ws://host:port`)**: Built-in `Network.framework` (`NWListener` + `NWProtocolWebSocket`) server configurable in **Preferences** and **Advanced** (`ws://127.0.0.1:8765` or LAN `ws://<LAN-IP>:8765`, optional Auth Token) plus `webcamctl ws [status|on|off|port <n>|lan <on|off>|token <secret|none>]`. Supports real-time JSON and plain-text commands (`status`, `list`, `set`, `reset`, `reset_view`, `reset_image`, `stream`, `preset`, `config`, `lock`, `look`, `who`, `ping`) and broadcasts live `state_changed` events to connected clients.
+- **Menu Bar Context Menu (right-click / double-click)**: replaces the old shortcut to `Advanced` with four entries — **Turn Configuration Off / On**, **Open Advanced…**, **About WebCam Controller**, **Quit WebCam Controller**.
+- **Configuration On/Off**: parks your saved values and restores the camera's factory defaults, then re-applies them when turned back on. The Anti-Reset Lock and startup presets stand down while it is off. Available from the context menu, a power button in the Menu Bar popover, `webcamctl config on|off|toggle|status`, `webcamcontroller://config/…`, WebSocket, and a global shortcut. A `Config OFF` badge shows in the bottom bar and the menu bar icon dims.
+- **License Line in `Advanced` and About Panel**: *Released under the [MIT License](https://github.com/SilverFeit/MacOS-WebCam-Controller/blob/main/LICENSE). Copyright © 2026 [SilverFeit](https://github.com/SilverFeit).* with clickable links to the repository `LICENSE` and the author.
+- **Interactive 2D PTZ Framing Pad (`FramingPadView`)**: Drag the 16:9 crop viewport in `Advanced` to pan and tilt simultaneously in a single 8-byte Endpoint 0 transfer, double-click to reset view (`Zoom`, `Pan`, `Tilt`), or right-click for quick reset actions.
+- **Vendor Extension Unit (XU) Hardware Profiles**: Bundled profiles for Insta360 Link series, Anker PowerConf C200, and AnkerWork C310 (HDR, Field of View `65°`/`78°`/`95°`, EV compensation, Face Auto-Focus/Exposure, AI Mic Noise Reduction) plus custom JSON profiles in `~/Library/Application Support/WebCamController/Profiles/`.
+- **Natural-Language Look Adjustment & Scoped Resets**: `webcamctl look "<phrase>"` and `webcamcontroller://look/<phrase>` (e.g. `"warmer, more contrast"`, `"black and white"`, `"natural"`), plus `webcamctl reset-view` and `webcamctl reset-image`.
+- **`webcamcontroller://` URL Scheme**: `preset/<name|n|default>`, `config/on|off|toggle`, `lock/on|off`, `reset`, `reset-view`, `reset-image`, `look/<phrase>`, `camera/<name>`, `set?control=value&…`, plus `?camera=` — usable from Shortcuts, Raycast, Stream Deck and `open -g`.
+- **Optional Global Shortcuts (Carbon, no permissions)**: `⌃⌥⌘0` toggles your configuration, `⌃⌥⌘1`–`⌃⌥⌘5` apply presets 1–5.
+- **Camera Report**: `Preferences → Copy Camera Report` and `webcamctl report` produce a paste-ready Markdown report (identity, USB link, descriptor units, control ranges, video modes) and open the bug report form.
+- **Preset Export / Import**: `Preferences → Export… / Import…`, `webcamctl preset export|import` — portable JSON, duplicate names are numbered and `Load at Start` is never imported.
+- **USB Link Check**: reads `bcdUSB` and the negotiated link speed; warns when a USB 3 camera is running at USB 2 speed. Shown in the panel, `Preferences`, `webcamctl describe` and `webcamctl list --json`.
+- **Double-click a slider label to reset it** to the camera default.
+
+### Changed
+- **Serialized, Rate-Limited Endpoint 0 Transfers**: every control request of every camera shares one lock with a minimum gap, protecting firmwares that stall under bursts (slider drags, lock re-assertion, CLI).
+- **Forbidden Extension Selector Guard**: writes to known firmware / USB-mode-switch extension selectors are refused at the lowest level.
+- **Highest-Rate Natural Mode Selection (`UVCStreamValidator.naturalSelection`)**: Selects the highest resolution with `>= 30 fps` (`16:9` preferred) and the highest frame rate at that resolution (`60 fps` over `30 fps`).
+
 ## [1.1.1] - 2026-11-04
 
 ### Added

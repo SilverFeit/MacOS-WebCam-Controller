@@ -23,7 +23,15 @@ COMMANDS:
   preset save <name> [--startup]         Save current hardware state as a named preset
   preset apply <name>                    Apply a saved preset (or 'default') to hardware
   preset delete <name>                   Delete a saved preset
+  preset export [file]                   Export all saved presets as portable JSON (stdout when no file)
+  preset import <file>                   Import presets exported from another Mac
   lock [on|off|status]                   Control or inspect the Anti-Reset Hardware Lock
+  config [on|off|toggle|status]          Turn your saved configuration on (re-apply) or off (factory defaults)
+  look <phrase>                          Adjust camera look by keyword (e.g. "warmer, more contrast", "bw", "natural")
+  reset-view | reset-image               Reset only PTZ framing (Zoom/Pan/Tilt) or only image controls to default
+  ws [status|on|off|port <n>|lan <on|off>]
+                                         Configure or inspect the WebSocket remote network control server
+  report                                 Print a paste-ready Markdown camera report for GitHub issues
   who                                    Show active camera streams & likely video call apps
   sessions [--clear]                     Show recent camera call session history
   check-update                           Check GitHub Releases for a newer version
@@ -193,6 +201,8 @@ private struct WebcamCTL {
                         "serial": id.serialNumber,
                         "location_id": id.locationHex,
                         "persistent_id": id.persistentID,
+                        "usb_link": id.usbSpeedTitle,
+                        "usb_spec": String(format: "0x%04x", id.usbSpecBCD),
                         "streaming": cam.isHardwareStreamingActive
                     ] as [String: Any]
                 })
@@ -260,6 +270,8 @@ private struct WebcamCTL {
                 ])
             } else {
                 print("\(id.productName)  [\(id.vidPidHex)]  FW \(id.firmwareHex)  UVC \(id.uvcVersionString)")
+                print("USB Link: \(id.usbSpeedTitle)")
+                if let warning = id.usbLinkWarning { print("Warning : \(warning)") }
                 print("VideoControl Ifc #\(id.videoControlInterfaceNumber)  ·  CameraTerminal ID=\(id.cameraTerminalId)  ·  ProcessingUnit ID=\(id.processingUnitId)")
                 for xu in id.extensionUnits {
                     let label = xu.knownVendorTitle ?? "Vendor Extension Unit"
@@ -434,7 +446,7 @@ private struct WebcamCTL {
         case "preset":
             let startupFlag = takeFlag("--startup", "--load-at-start")
             guard let sub = args.first else {
-                throw CLIError("usage: webcamctl preset <list|save|apply|delete> [name]")
+                throw CLIError("usage: webcamctl preset <list|save|apply|delete|export|import> [name|file]")
             }
             let presetName = args.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
@@ -506,8 +518,32 @@ private struct WebcamCTL {
                 } else {
                     print("Deleted preset '\(match.name)'.")
                 }
+            case "export":
+                let data = try manager.presetStore.exportData()
+                if presetName.isEmpty {
+                    print(String(decoding: data, as: UTF8.self))
+                } else {
+                    let path = (presetName as NSString).expandingTildeInPath
+                    try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+                    let count = manager.presetStore.loadAll().count
+                    if jsonOutput {
+                        try printJSONObject(["exported": count, "file": path])
+                    } else {
+                        print("Exported \(count) preset(s) to \(path).")
+                    }
+                }
+            case "import":
+                guard !presetName.isEmpty else { throw CLIError("`preset import` requires a file path") }
+                let path = (presetName as NSString).expandingTildeInPath
+                let count = try manager.importPresets(from: URL(fileURLWithPath: path))
+                CameraManager.postExternalSyncNotification()
+                if jsonOutput {
+                    try printJSONObject(["imported": count])
+                } else {
+                    print("Imported \(count) preset(s) from \(path).")
+                }
             default:
-                throw CLIError("unknown preset subcommand '\(sub)' (expected list, save, apply, or delete)")
+                throw CLIError("unknown preset subcommand '\(sub)' (expected list, save, apply, delete, export, or import)")
             }
 
         case "lock":
@@ -530,6 +566,130 @@ private struct WebcamCTL {
                 try printJSONObject(["hardware_lock": manager.isHardwareLockEnabled])
             } else {
                 print("Anti-Reset Hardware Lock: \(manager.isHardwareLockEnabled ? "ON" : "OFF")")
+            }
+
+        case "config", "configuration":
+            let sub = args.first?.lowercased() ?? "status"
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            switch sub {
+            case "on", "enable", "true", "1":
+                manager.setConfigurationEnabled(true)
+                CameraManager.postExternalSyncNotification()
+            case "off", "disable", "false", "0":
+                manager.setConfigurationEnabled(false)
+                CameraManager.postExternalSyncNotification()
+            case "toggle":
+                manager.setConfigurationEnabled(!manager.isConfigurationEnabled)
+                CameraManager.postExternalSyncNotification()
+            case "status":
+                break
+            default:
+                throw CLIError("expected `webcamctl config [on|off|toggle|status]`")
+            }
+            if jsonOutput {
+                try printJSONObject(["configuration_enabled": manager.isConfigurationEnabled])
+            } else {
+                print("Configuration: \(manager.isConfigurationEnabled ? "ON" : "OFF (camera on factory defaults)")")
+            }
+
+        case "report":
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            let cam = try selectTargetCamera(in: manager, selector: cameraSelector)
+            let report = CameraReport.markdown(for: cam)
+            if jsonOutput {
+                try printJSONObject(["report": report, "issue_url": CameraReport.issueURL.absoluteString])
+            } else {
+                print(report, terminator: "")
+            }
+
+        case "look":
+            let phrase = args.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !phrase.isEmpty else {
+                throw CLIError("usage: webcamctl look <phrase> (e.g. `webcamctl look \"warmer, more contrast\"`)")
+            }
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            let cam = try selectTargetCamera(in: manager, selector: cameraSelector)
+            let summary = cam.applyLook(phrase)
+            CameraManager.postExternalSyncNotification()
+            if jsonOutput {
+                try printJSONObject(["look": phrase, "summary": summary])
+            } else {
+                print(summary)
+            }
+
+        case "reset-view", "reset_view":
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            let cam = try selectTargetCamera(in: manager, selector: cameraSelector)
+            cam.resetViewToDefaults()
+            CameraManager.postExternalSyncNotification()
+            if jsonOutput {
+                try printJSONObject(["reset_view": true, "camera": cam.identity.productName])
+            } else {
+                print("Reset PTZ view (Zoom, Pan, Tilt) to defaults on \(cam.identity.productName).")
+            }
+
+        case "reset-image", "reset_image":
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            let cam = try selectTargetCamera(in: manager, selector: cameraSelector)
+            cam.resetImageToDefaults()
+            CameraManager.postExternalSyncNotification()
+            if jsonOutput {
+                try printJSONObject(["reset_image": true, "camera": cam.identity.productName])
+            } else {
+                print("Reset image controls to defaults on \(cam.identity.productName).")
+            }
+
+        case "ws", "websocket":
+            let sub = args.first?.lowercased() ?? "status"
+            let manager = CameraManager(enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            switch sub {
+            case "on", "enable", "true", "1":
+                manager.webSocketEnabled = true
+                CameraManager.postExternalSyncNotification()
+            case "off", "disable", "false", "0":
+                manager.webSocketEnabled = false
+                CameraManager.postExternalSyncNotification()
+            case "port":
+                guard args.count >= 2, let port = Int(args[1]), (1024...65535).contains(port) else {
+                    throw CLIError("usage: webcamctl ws port <1024..65535>")
+                }
+                manager.webSocketPort = port
+                CameraManager.postExternalSyncNotification()
+            case "lan":
+                guard args.count >= 2 else {
+                    throw CLIError("usage: webcamctl ws lan <on|off>")
+                }
+                let on = ["on", "true", "1", "yes"].contains(args[1].lowercased())
+                manager.webSocketAllowLAN = on
+                CameraManager.postExternalSyncNotification()
+            case "token":
+                let tok = args.count >= 2 ? args[1] : ""
+                manager.webSocketAuthToken = (tok.lowercased() == "none" || tok.lowercased() == "off") ? "" : tok
+                CameraManager.postExternalSyncNotification()
+            case "status":
+                break
+            default:
+                throw CLIError("expected `webcamctl ws [status|on|off|port <n>|lan <on|off>|token <secret|none>]`")
+            }
+            let endpoint = manager.webSocketServer.displayEndpointURL(allowLAN: manager.webSocketAllowLAN)
+            if jsonOutput {
+                try printJSONObject([
+                    "enabled": manager.webSocketEnabled,
+                    "port": manager.webSocketPort,
+                    "allow_lan": manager.webSocketAllowLAN,
+                    "endpoint": endpoint,
+                    "token_required": !manager.webSocketAuthToken.isEmpty
+                ])
+            } else {
+                print("WebSocket Remote Server: \(manager.webSocketEnabled ? "ENABLED" : "DISABLED")")
+                print("Endpoint               : \(endpoint) (\(manager.webSocketAllowLAN ? "LAN 0.0.0.0" : "Localhost 127.0.0.1"))")
+                print("Token Authentication   : \(manager.webSocketAuthToken.isEmpty ? "None" : "Required")")
             }
 
         default:

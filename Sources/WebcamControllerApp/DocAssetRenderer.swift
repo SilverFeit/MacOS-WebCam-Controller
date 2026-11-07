@@ -59,11 +59,25 @@ enum DocAssetRenderer {
             WebcamSettingsPanelView(manager: manager)
         }
 
+        // Full-height Advanced card: scrolls the whole tab into view, down to the project license line.
+        let advancedFullCard = renderFramedWindowView(
+            title: "Webcam Settings Panel",
+            width: 472,
+            height: 1280
+        ) {
+            WebcamSettingsPanelView(manager: manager)
+        }
+        if let fullRep = advancedFullCard?.representations.first as? NSBitmapImageRep,
+           let png = fullRep.representation(using: .png, properties: [:]) {
+            try png.write(to: outURL.appendingPathComponent("panel-advanced-full.png"))
+            print("Saved panel-advanced-full.png")
+        }
+
         manager.activePanelTab = .preferences
         let preferencesWindowCard = renderFramedWindowView(
             title: "Webcam Settings Panel",
             width: 472,
-            height: 716
+            height: 820
         ) {
             WebcamSettingsPanelView(manager: manager)
         }

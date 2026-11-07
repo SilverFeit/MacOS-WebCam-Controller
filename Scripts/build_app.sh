@@ -3,20 +3,21 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 PACKAGE_DIR="${SCRIPT_DIR:h}"
-VERSION="$(tr -d '[:space:]' < "${PACKAGE_DIR}/VERSION" 2>/dev/null || echo "1.1.0")"
+VERSION="$(tr -d '[:space:]' < "${PACKAGE_DIR}/VERSION" 2>/dev/null || echo "1.2.0")"
 APP_NAME="WebCam Controller"
 STAGE_BUNDLE="/tmp/${APP_NAME}.app"
 APP_BUNDLE="${PACKAGE_DIR}/dist/${APP_NAME}.app"
 
 export CLANG_MODULE_CACHE_PATH="/tmp/clang-module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="/tmp/swiftpm-module-cache"
+SCRATCH_DIR="${SWIFT_SCRATCH_DIR:-/tmp/webcamcontroller-spm-build}"
 
 echo "[1/4] Building Release binaries (WebcamControllerApp + webcamctl v${VERSION}) via SwiftPM..."
-swift build -c release --arch arm64 --product WebcamControllerApp --package-path "${PACKAGE_DIR}" --disable-sandbox
-swift build -c release --arch arm64 --product webcamctl --package-path "${PACKAGE_DIR}" --disable-sandbox
+swift build -c release --arch arm64 --product WebcamControllerApp --package-path "${PACKAGE_DIR}" --scratch-path "${SCRATCH_DIR}" --disable-sandbox
+swift build -c release --arch arm64 --product webcamctl --package-path "${PACKAGE_DIR}" --scratch-path "${SCRATCH_DIR}" --disable-sandbox
 
-APP_BIN_PATH="${PACKAGE_DIR}/.build/release/WebcamControllerApp"
-CLI_BIN_PATH="${PACKAGE_DIR}/.build/release/webcamctl"
+APP_BIN_PATH="${SCRATCH_DIR}/release/WebcamControllerApp"
+CLI_BIN_PATH="${SCRATCH_DIR}/release/webcamctl"
 
 echo "[2/4] Generating high-DPI macOS AppIcon.icns..."
 ICONSET_DIR="/tmp/WebcamControllerIcon.iconset"
@@ -57,6 +58,17 @@ cat << EOF > "${STAGE_BUNDLE}/Contents/Info.plist"
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>${VERSION}</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.webcamcontroller.uvc</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>webcamcontroller</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>
@@ -66,7 +78,7 @@ cat << EOF > "${STAGE_BUNDLE}/Contents/Info.plist"
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Direct USB UVC Hardware Controller for macOS</string>
+    <string>Released under the MIT License. Copyright © 2026 SilverFeit.</string>
 </dict>
 </plist>
 EOF

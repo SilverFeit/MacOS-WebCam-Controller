@@ -83,7 +83,7 @@ public struct SemanticVersion: Comparable, Equatable, Sendable, CustomStringConv
 }
 
 public enum AppBuildInfo {
-    public static let fallbackVersion = "1.1.1"
+    public static let fallbackVersion = "1.2.0"
     public static let bundleIdentifier = "com.webcamcontroller.uvc"
     public static let githubOwner = "SilverFeit"
     public static let githubRepo = "MacOS-WebCam-Controller"
@@ -91,6 +91,16 @@ public enum AppBuildInfo {
     public static let repositoryURL = URL(string: "https://github.com/SilverFeit/MacOS-WebCam-Controller")!
     public static let releasesPageURL = URL(string: "https://github.com/SilverFeit/MacOS-WebCam-Controller/releases")!
     public static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/SilverFeit/MacOS-WebCam-Controller/releases/latest")!
+
+    public static let licenseName = "MIT License"
+    public static let copyrightYear = "2026"
+    public static let authorName = "SilverFeit"
+    public static let licenseURL = URL(string: "https://github.com/SilverFeit/MacOS-WebCam-Controller/blob/main/LICENSE")!
+    public static let authorURL = URL(string: "https://github.com/SilverFeit")!
+
+    /// Markdown shown at the bottom of the Advanced tab and in the About panel.
+    public static let licenseMarkdown =
+        "Released under the [\(licenseName)](\(licenseURL.absoluteString)). Copyright © \(copyrightYear) [\(authorName)](\(authorURL.absoluteString))."
 
     public static let homebrewInstallCommand = "brew install --cask SilverFeit/tap/macos-webcam-controller"
     public static let homebrewUpgradeCommand = "brew upgrade --cask macos-webcam-controller"

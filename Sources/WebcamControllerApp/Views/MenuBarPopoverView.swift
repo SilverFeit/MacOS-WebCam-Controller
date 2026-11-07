@@ -55,6 +55,19 @@ public struct MenuBarPopoverView: View {
                 }
 
                 Button {
+                    manager.setConfigurationEnabled(!manager.isConfigurationEnabled)
+                } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(manager.isConfigurationEnabled ? Color.accentColor : Color.orange)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(manager.isConfigurationEnabled
+                      ? "Turn your configuration off (camera returns to factory defaults)"
+                      : "Turn your configuration back on (re-applies your saved values)")
+
+                Button {
                     if manager.shouldDisplayFloatingOverlay {
                         manager.isOverlayDismissedForSession = true
                         if manager.streamOverlayMode == .always {

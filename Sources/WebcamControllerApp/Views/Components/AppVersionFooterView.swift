@@ -29,6 +29,13 @@ public struct AppVersionFooterView: View {
 
             Spacer(minLength: 4)
 
+            if !manager.isConfigurationEnabled {
+                Label("Config OFF", systemImage: "power")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .help("Your configuration is turned off — the camera runs on its factory defaults.")
+            }
+
             if manager.isHardwareLockEnabled {
                 Label("Locked", systemImage: "lock.fill")
                     .font(.system(size: 10, weight: .semibold))

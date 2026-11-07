@@ -306,6 +306,10 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
     public let productName: String
     public let vendorName: String
     public let serialNumber: String
+    /// `bcdUSB` advertised by the device (`0x0200` = USB 2.0, `0x0300` = USB 3.0). `0` when unknown.
+    public let usbSpecBCD: UInt16
+    /// IOKit `USBDeviceSpeed`: 0 low, 1 full, 2 high, 3 SuperSpeed, 4 SuperSpeed+. `0` when unknown.
+    public let usbSpeed: UInt8
 
     public init(
         vendorId: UInt16,
@@ -319,8 +323,12 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
         extensionUnits: [UVCExtensionUnit] = [],
         productName: String,
         vendorName: String,
-        serialNumber: String
+        serialNumber: String,
+        usbSpecBCD: UInt16 = 0,
+        usbSpeed: UInt8 = 0
     ) {
+        self.usbSpecBCD = usbSpecBCD
+        self.usbSpeed = usbSpeed
         self.vendorId = vendorId
         self.productId = productId
         self.locationId = locationId
@@ -373,6 +381,32 @@ public struct CameraIdentity: Equatable, Hashable, Sendable, Codable {
         self.productName = prod.isEmpty ? String(format: "USB Camera (0x%04x:0x%04x)", cInfo.vendorId, cInfo.productId) : prod
         self.vendorName = vend
         self.serialNumber = serial
+        self.usbSpecBCD = cInfo.usbSpecBCD
+        self.usbSpeed = cInfo.usbSpeed
+    }
+
+    /// Human-readable negotiated USB link speed (`USB 2.0 High-Speed`, `USB 3 SuperSpeed`...).
+    public var usbSpeedTitle: String {
+        switch usbSpeed {
+        case 1: return "USB Full-Speed (12 Mb/s)"
+        case 2: return "USB 2.0 High-Speed (480 Mb/s)"
+        case 3: return "USB 3 SuperSpeed (5 Gb/s)"
+        case 4: return "USB 3 SuperSpeed+ (10 Gb/s)"
+        case 0 where usbSpecBCD == 0: return "unknown"
+        case 0: return "USB 1.0 Low-Speed"
+        default: return "USB speed \(usbSpeed)"
+        }
+    }
+
+    /// Set when a USB 3 camera (advertises `bcdUSB >= 3.0`) enumerated below SuperSpeed, which usually means a
+    /// USB 2 port, hub or cable is capping resolution / frame rate.
+    public var usbLinkWarning: String? {
+        Self.usbLinkWarning(bcdUSB: Int(usbSpecBCD), speed: Int(usbSpeed))
+    }
+
+    public static func usbLinkWarning(bcdUSB: Int, speed: Int) -> String? {
+        guard bcdUSB >= 0x0300, speed > 0, speed < 3 else { return nil }
+        return "Connected at USB 2 speed. Use a USB 3 port or cable for full resolution and frame rate."
     }
 
     public var firmwareHex: String {

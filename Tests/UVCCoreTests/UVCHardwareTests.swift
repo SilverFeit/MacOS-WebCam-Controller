@@ -490,6 +490,177 @@ struct UVCHardwareTestSuite {
             }
         }
 
+        runTest("15. webcamcontroller:// URL Scheme Parsing") {
+            func parse(_ raw: String) -> (command: ControllerURLCommand, camera: String?)? {
+                URL(string: raw).flatMap(ControllerURLCommand.parse)
+            }
+            try expectEqual(parse("webcamcontroller://preset/Meeting")?.command, .preset("Meeting"))
+            try expectEqual(parse("webcamcontroller://preset/Night%20Mode")?.command, .preset("Night Mode"))
+            try expectEqual(parse("webcamcontroller://preset/2")?.command, .preset("2"))
+            try expectEqual(parse("webcamcontroller://reset")?.command, .reset)
+            try expectEqual(parse("webcamcontroller://lock/on")?.command, .lock(true))
+            try expectEqual(parse("webcamcontroller://lock/OFF")?.command, .lock(false))
+            try expectEqual(parse("webcamcontroller://config/toggle")?.command, .configuration(.toggle))
+            try expectEqual(parse("webcamcontroller://config/off")?.command, .configuration(.off))
+            try expectEqual(parse("webcamcontroller://camera/Brio")?.command, .camera("Brio"))
+            try expectEqual(parse("webcamcontroller://preset/Studio?camera=C920")?.camera, "C920")
+
+            let set = parse("webcamcontroller://set?exposure_mode=manual&shutter=1/60&camera=0")
+            try expectEqual(set?.camera, "0")
+            if case let .set(items)? = set?.command {
+                try expectEqual(items.map(\.control), ["exposure_mode", "shutter"])
+                try expectEqual(items.map(\.value), ["manual", "1/60"])
+            } else {
+                throw TestFailure("set command should parse into assignments")
+            }
+
+            try expect(parse("webcamcontroller://config/maybe") == nil, "unknown config action rejected")
+            try expect(parse("webcamcontroller://set") == nil, "empty set rejected")
+            try expect(parse("webcamcontroller://preset") == nil, "preset without name rejected")
+            try expect(parse("https://example.com/preset/x") == nil, "foreign scheme rejected")
+        }
+
+        runTest("16. Configuration On/Off Keeps Your Values and Restores Them") {
+            let suiteName = "com.webcamcontroller.cfgtoggle.\(UUID().uuidString)"
+            let testDefaults = UserDefaults(suiteName: suiteName)!
+            defer { testDefaults.removePersistentDomain(forName: suiteName) }
+
+            let manager = CameraManager(defaults: testDefaults, enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+
+            try expect(manager.isConfigurationEnabled, "configuration is ON by default")
+            try expect(manager.setConfigurationEnabled(false) == false, "turning off reports OFF")
+            try expect(!manager.isConfigurationEnabled, "configuration flag is OFF")
+            try expectEqual(testDefaults.object(forKey: "com.webcamcontroller.isConfigurationEnabled") as? Bool, false, "OFF is persisted")
+            try expect(manager.setConfigurationEnabled(true), "turning on reports ON")
+            try expect(manager.execute(.configuration(.toggle)).contains("OFF"), "toggle command turns configuration off")
+            try expect(manager.execute(.configuration(.on)).contains("ON"), "on command turns configuration on")
+            try expect(manager.execute(.camera("no-such-camera")).contains("not found"), "unknown camera is reported")
+        }
+
+        runTest("17. Preset Export / Import Round-Trip, USB Link Warning & Forbidden XU Selector Guard") {
+            let suiteName = "com.webcamcontroller.presetio.\(UUID().uuidString)"
+            let testDefaults = UserDefaults(suiteName: suiteName)!
+            defer { testDefaults.removePersistentDomain(forName: suiteName) }
+
+            let store = PresetStore(defaults: testDefaults)
+            let identity = CameraIdentity(
+                vendorId: 0x046d, productId: 0x082d, locationId: 0x01100000,
+                uvcVersionBCD: 0x0100, videoControlInterfaceNumber: 0,
+                cameraTerminalId: 1, processingUnitId: 3,
+                productName: "Test Cam", vendorName: "Test", serialNumber: "SN1"
+            )
+            store.upsertPreset(name: "Meeting", for: identity, snapshot: CameraSettingsSnapshot(brightness: 12, whiteBalanceTemperature: 4500), loadAtStart: true)
+            let exported = try store.exportData()
+
+            let other = PresetStore(defaults: UserDefaults(suiteName: suiteName + ".b")!)
+            defer { UserDefaults(suiteName: suiteName + ".b")?.removePersistentDomain(forName: suiteName + ".b") }
+            try expectEqual(try other.importData(exported), 1, "first import")
+            try expectEqual(try other.importData(exported), 1, "second import")
+            let names = other.presets(for: identity).map(\.name).sorted()
+            try expectEqual(names, ["Meeting", "Meeting 2"], "duplicate names are numbered")
+            try expect(other.presets(for: identity).allSatisfy { !$0.loadAtStart }, "Load at Start is never imported")
+            try expectEqual(other.presets(for: identity).first?.snapshot.brightness, 12, "snapshot preserved")
+
+            try expect(CameraIdentity.usbLinkWarning(bcdUSB: 0x0310, speed: 2) != nil, "USB 3 camera on USB 2 link warns")
+            try expect(CameraIdentity.usbLinkWarning(bcdUSB: 0x0310, speed: 3) == nil, "SuperSpeed link is fine")
+            try expect(CameraIdentity.usbLinkWarning(bcdUSB: 0x0200, speed: 2) == nil, "USB 2 camera on USB 2 link is fine")
+            try expect(CameraIdentity.usbLinkWarning(bcdUSB: 0x0310, speed: 0) == nil, "unknown speed never warns")
+
+            let insta360XU: [UInt8] = [0x2d, 0x67, 0xf1, 0xfa, 0x1b, 0xb7, 0x93, 0x47, 0x8c, 0x91, 0x7b, 0x1c, 0x9b, 0x7f, 0x95, 0xf8]
+            try expect(cuvc_selector_is_forbidden(insta360XU, 17), "Insta360 XU9 selector 17 (USB mode switch) is blocked")
+            try expect(!cuvc_selector_is_forbidden(insta360XU, 30), "other Insta360 selectors stay writable")
+            try expect(!cuvc_selector_is_forbidden([UInt8](repeating: 0xAB, count: 16), 17), "unrelated GUIDs are unaffected")
+        }
+
+        runTest("18. Natural-Language Look Adjustment, 2D PTZ Reset & Max Quality Stream Selection") {
+            let showcase = UVCCameraDevice.makeDocumentationShowcaseDevice()
+            let initialWB = showcase.whiteBalanceTemperature.current
+            let initialContrast = showcase.contrast.current
+
+            let lookMsg = showcase.applyLook("warmer, more contrast")
+            try expect(lookMsg.contains("warmer"), "warmer step applied")
+            try expect(lookMsg.contains("more contrast"), "more contrast step applied")
+            try expect(showcase.whiteBalanceTemperature.current > initialWB, "Kelvin increased for warmer look")
+            try expect(showcase.contrast.current > initialContrast, "Contrast increased")
+
+            let bwMsg = showcase.applyLook("black and white")
+            try expect(bwMsg.contains("monochrome"), "monochrome step applied")
+            try expectEqual(showcase.saturation.current, showcase.saturation.minimum, "Saturation set to minimum for B&W")
+
+            showcase.resetImageToDefaults()
+            try expectEqual(showcase.saturation.current, showcase.saturation.defaultValue, "Saturation restored by resetImageToDefaults")
+            try expectEqual(showcase.contrast.current, showcase.contrast.defaultValue, "Contrast restored by resetImageToDefaults")
+
+            _ = showcase.setPanTiltAbsolute(pan: 10800, tilt: -7200)
+            try expectEqual(showcase.panAbsolute.current, 10800, "2D Pan updated")
+            try expectEqual(showcase.tiltAbsolute.current, -7200, "2D Tilt updated")
+            showcase.resetViewToDefaults()
+            try expectEqual(showcase.panAbsolute.current, showcase.panAbsolute.defaultValue, "Pan reset by resetViewToDefaults")
+            try expectEqual(showcase.tiltAbsolute.current, showcase.tiltAbsolute.defaultValue, "Tilt reset by resetViewToDefaults")
+            try expectEqual(showcase.zoomAbsolute.current, showcase.zoomAbsolute.defaultValue, "Zoom reset by resetViewToDefaults")
+
+            // Natural max-quality selection (16:9 highest resolution >= 30fps, highest FPS at that size)
+            let nat2K = UVCStreamValidator.naturalSelection(in: showcase.streamModes, minFPS: 30)
+            try expectEqual(nat2K?.width, 2560, "Natural selection picks 2K width")
+            try expectEqual(nat2K?.fps, 30, "Natural selection picks 30 fps at 2K")
+
+            let modes1080 = showcase.streamModes.filter { $0.width < 2560 }
+            let nat1080 = UVCStreamValidator.naturalSelection(in: modes1080, minFPS: 30)
+            try expectEqual(nat1080?.width, 1920, "Natural selection picks 1080p")
+            try expectEqual(nat1080?.fps, 60, "Natural selection picks 60 fps over 30 fps at 1080p")
+
+            // Vendor profile matching
+            let c200 = CameraIdentity(
+                vendorId: 0x291A, productId: 0x3369, locationId: 1,
+                uvcVersionBCD: 0x0110, videoControlInterfaceNumber: 0,
+                cameraTerminalId: 1, processingUnitId: 2,
+                productName: "Anker PowerConf C200", vendorName: "Anker", serialNumber: "1"
+            )
+            try expectEqual(VendorProfileRegistry.matchingProfile(for: c200)?.name, "Anker PowerConf C200")
+        }
+
+        runTest("19. WebSocket Remote Network Control Protocol (JSON, Plain-Text CLI & Token Auth)") {
+            let suiteName = "com.webcamcontroller.ws.\(UUID().uuidString)"
+            let testDefaults = UserDefaults(suiteName: suiteName)!
+            defer { testDefaults.removePersistentDomain(forName: suiteName) }
+
+            let manager = CameraManager(defaults: testDefaults, enableHotplugWatcher: false, enableBackgroundMonitors: false)
+            defer { manager.shutdown() }
+            manager.loadDocumentationShowcaseCamera()
+
+            let ws = manager.webSocketServer
+            var authed = true
+
+            // 1. JSON status
+            let statusReply = ws.handleIncomingMessage("{\"action\":\"status\",\"id\":\"req-1\"}", clientAuthenticated: &authed)
+            try expect(statusReply.contains("\"ok\":true"), "JSON status ok")
+            try expect(statusReply.contains("\"id\":\"req-1\""), "Request ID echoed")
+            try expect(statusReply.contains("Pro UVC 2K Studio Webcam"), "Camera name included in status")
+
+            // 2. JSON set control
+            let setReply = ws.handleIncomingMessage("{\"action\":\"set\",\"control\":\"brightness\",\"value\":24}", clientAuthenticated: &authed)
+            try expect(setReply.contains("\"ok\":true"), "JSON set ok")
+            try expectEqual(manager.selectedCamera?.brightness.current, 24, "Brightness updated via WebSocket JSON set")
+
+            // 3. Plain-text command over WebSocket
+            let textReply = ws.handleIncomingMessage("set contrast=75 zoom=180", clientAuthenticated: &authed)
+            try expect(textReply.contains("\"ok\":true"), "Plain-text set ok")
+            try expectEqual(manager.selectedCamera?.contrast.current, 75, "Contrast updated via WebSocket text command")
+            try expectEqual(manager.selectedCamera?.zoomAbsolute.current, 180, "Zoom updated via WebSocket text command")
+
+            // 4. Token authentication enforcement
+            manager.webSocketAuthToken = "secret-123"
+            var unauthedClient = false
+            let denied = ws.handleIncomingMessage("{\"action\":\"status\"}", clientAuthenticated: &unauthedClient)
+            try expect(denied.contains("\"ok\":false"), "Unauthenticated request rejected when token is configured")
+            try expect(!unauthedClient, "Client remains unauthenticated")
+
+            let granted = ws.handleIncomingMessage("{\"action\":\"auth\",\"token\":\"secret-123\"}", clientAuthenticated: &unauthedClient)
+            try expect(granted.contains("\"ok\":true"), "Valid token authenticates session")
+            try expect(unauthedClient, "Session marked authenticated")
+        }
+
         print("---------------------------------------------------------------")
         print(" Summary: \(passed) passed, \(skipped) skipped, \(failed) failed")
         print("===============================================================")

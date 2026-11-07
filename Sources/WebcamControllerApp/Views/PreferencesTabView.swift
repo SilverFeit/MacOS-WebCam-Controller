@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 import UVCCore
 
 public struct PreferencesTabView: View {
@@ -39,6 +40,12 @@ public struct PreferencesTabView: View {
                                 .font(.system(size: 11, design: .monospaced))
                         }
                         GridRow {
+                            Text("USB Link:").foregroundStyle(.secondary)
+                            Text(id.usbSpeedTitle)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(id.usbLinkWarning == nil ? Color.primary : Color.orange)
+                        }
+                        GridRow {
                             Text("Configured ID:").foregroundStyle(.secondary)
                             Text(manager.configuredCameraID.isEmpty ? "Auto" : manager.configuredCameraID)
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
@@ -63,6 +70,15 @@ public struct PreferencesTabView: View {
                             manager.statusMessage = "Read live registers from \(id.productName)"
                         }
                         .controlSize(.small)
+
+                        Button("Copy Camera Report") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(CameraReport.markdown(for: cam), forType: .string)
+                            manager.statusMessage = "Camera report copied — paste it into a GitHub issue"
+                            NSWorkspace.shared.open(CameraReport.issueURL)
+                        }
+                        .controlSize(.small)
+                        .help("Copies your camera's controls, descriptor and video modes, then opens a GitHub issue to paste it into.")
                     }
                     .padding(.top, 3)
                 } else {
@@ -149,6 +165,17 @@ public struct PreferencesTabView: View {
                 }
                 .toggleStyle(.checkbox)
 
+                Toggle(isOn: $manager.globalHotkeysEnabled) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Global shortcuts (work in any app, no permissions)")
+                            .font(.system(size: 11.5, weight: .medium))
+                        Text("⌃⌥⌘0 turns your configuration on/off · ⌃⌥⌘1–5 apply saved presets 1–5.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+
                 HStack(spacing: 8) {
                     Text("Floating Stream Stats HUD:")
                         .font(.system(size: 11.5))
@@ -171,7 +198,92 @@ public struct PreferencesTabView: View {
                 }
             }
 
-            // 3. Version, GitHub Updates, Homebrew & CLI (`webcamctl`)
+            // 3. Advanced — Network WebSocket Remote Control (`ws://`)
+            PanelGroupBox(
+                "Advanced — Network WebSocket Control (ws://)",
+                headerTrailing: {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(manager.webSocketEnabled ? Color.green : Color.secondary.opacity(0.4))
+                            .frame(width: 6, height: 6)
+                        Text(manager.webSocketEnabled
+                             ? "Active · \(manager.webSocketServer.connectedClientsCount) client\(manager.webSocketServer.connectedClientsCount == 1 ? "" : "s")"
+                             : "Disabled")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(manager.webSocketEnabled ? Color.accentColor : .secondary)
+                    }
+                }
+            ) {
+                let wsEndpoint = manager.webSocketServer.displayEndpointURL(allowLAN: manager.webSocketAllowLAN)
+
+                Toggle(isOn: $manager.webSocketEnabled) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Enable WebSocket Server for Remote Camera Control")
+                            .font(.system(size: 11.5, weight: .medium))
+                        Text("Control UVC exposure, white balance, PTZ, presets & stream modes over the network via JSON or CLI commands.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+
+                HStack(spacing: 8) {
+                    Text("Port:")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    TextField(
+                        "8765",
+                        value: $manager.webSocketPort,
+                        formatter: NumberFormatter()
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(width: 64)
+
+                    Toggle(isOn: $manager.webSocketAllowLAN) {
+                        Text("Allow LAN access (0.0.0.0)")
+                            .font(.system(size: 11))
+                    }
+                    .toggleStyle(.checkbox)
+                    .help("When enabled, other computers, phones, Stream Deck or Home Assistant on your local network can connect.")
+
+                    Spacer(minLength: 4)
+
+                    Button("Copy ws://") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(wsEndpoint, forType: .string)
+                        manager.statusMessage = "Copied WebSocket endpoint \(wsEndpoint)"
+                    }
+                    .controlSize(.mini)
+                }
+
+                HStack(spacing: 8) {
+                    Text("Endpoint:")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                    Text(wsEndpoint)
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(manager.webSocketEnabled ? Color.accentColor : .secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text("Token (optional):")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                    SecureField("None", text: $manager.webSocketAuthToken)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .frame(width: 96)
+                }
+
+                if let wsErr = manager.webSocketServer.lastError {
+                    Text(wsErr)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            // 4. Version, GitHub Updates, Homebrew & CLI (`webcamctl`)
             PanelGroupBox("Version, GitHub Updates, Homebrew & CLI") {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -224,7 +336,21 @@ public struct PreferencesTabView: View {
                 }
                 .padding(.top, 1)
 
-                Text("Bundled CLI: `webcamctl list | get | set | stream | preset | who | check-update`")
+                HStack(spacing: 6) {
+                    Text("Presets:")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Button("Export…") { exportPresets() }
+                        .controlSize(.mini)
+                    Button("Import…") { importPresets() }
+                        .controlSize(.mini)
+                    Spacer()
+                    Text("webcamcontroller://preset/Name")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Bundled CLI: `webcamctl list | get | set | stream | preset | config | look | ws | report | who | check-update`")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
@@ -278,6 +404,33 @@ public struct PreferencesTabView: View {
                 }
                 .controlSize(.regular)
             }
+        }
+    }
+
+    // MARK: - Preset Export / Import
+
+    private func exportPresets() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "WebCam Controller Presets.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let count = try manager.exportPresets(to: url)
+            manager.statusMessage = "Exported \(count) preset\(count == 1 ? "" : "s")"
+        } catch {
+            manager.statusMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func importPresets() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            _ = try manager.importPresets(from: url)
+        } catch {
+            manager.statusMessage = "Not a WebCam Controller presets file"
         }
     }
 }

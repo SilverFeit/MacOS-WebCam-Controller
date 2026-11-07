@@ -4,7 +4,7 @@
 
 # MacOS WebCam Controller — User Guide
 
-**Version 1.1.1 · Direct USB UVC Hardware Control + `webcamctl` CLI for Apple Silicon Macs**
+**Version 1.2.0 · Direct USB UVC Hardware Control + WebSocket API + `webcamctl` CLI for Apple Silicon Macs**
 
 </div>
 
@@ -48,13 +48,18 @@ brew upgrade --cask macos-webcam-controller
 
 ## Menu Bar & Bottom Version / Update Bar
 
-Left-click the webcam icon in the macOS Menu Bar to open the quick popover, or right-click it to open **Webcam Settings Panel** directly on **Advanced**.
+Left-click the webcam icon in the macOS Menu Bar to open the quick popover. **Right-click or double-click** it to open the context menu:
+
+1. **Turn Configuration Off / On** — off returns the camera to its factory defaults while your saved values are kept aside (the Anti-Reset Lock and startup presets stand down); on re-applies them. The same power button sits in the popover header.
+2. **Open Advanced…** — opens **Webcam Settings Panel** on **Advanced**.
+3. **About WebCam Controller** — version, license (*Released under the MIT License. Copyright © 2026 SilverFeit.*) and GitHub links.
+4. **Quit WebCam Controller**.
 
 At the bottom of **both** the Menu Bar popover and **Webcam Settings Panel**, the footer displays:
 
 - **Live Status / Active Call Telemetry:** Shows current status when idle, or **`Live: <App> · <Width>×<Height>@<FPS>fps (<Duration>)`** with a green indicator while an app is streaming from the webcam.
 - **`Locked` Indicator:** Appears whenever the Anti-Reset Hardware Lock is enabled.
-- **Version & GitHub Redirect (`v1.1.1 · GitHub ↗`):** Click to open the official GitHub Releases page, or click the adjacent refresh icon (`↻`) to check for updates immediately.
+- **Version & GitHub Redirect (`v1.2.0 · GitHub ↗`):** Click to open the official GitHub Releases page, or click the adjacent refresh icon (`↻`) to check for updates immediately.
 - **Automatic Update Pill (`⬆ Update vX.Y.Z · GitHub ↗`):** Highlights automatically when a newer release is published on GitHub.
 
 ## Tabs Overview
@@ -70,16 +75,23 @@ At the bottom of **both** the Menu Bar popover and **Webcam Settings Panel**, th
 - **Video Resolution & Frame Rate:** Lists hardware formats (`MJPEG`, `Uncompressed YUY2`, `H.264`), resolutions (`4K`, `2K`, `1080p`, `720p`, etc.), and **only** compatible FPS choices for the active resolution.
 - **Power Line Frequency (Anti-Flicker):** `Disabled`, `50 Hz`, `60 Hz`, and `Auto` (automatically clamped to `60 Hz` on UVC `< 1.5` cameras whose firmware stalls Endpoint 0 on `Auto`).
 - **Backlight & Low-Light Compensation (`AE Priority`).**
-- **Optics & PTZ:** **Auto/Manual Focus**, **Optical/Digital Zoom (`1.3×`)**, **Pan**, **Tilt**, **Aperture**, **Roll**, **Hardware Privacy Shutter**, and **Progressive Scan**.
+- **Optics & 2D PTZ Framing Pad:** Interactive 16:9 **2D PTZ Framing Pad** (drag to pan & tilt simultaneously, double-click to reset view), **Auto/Manual Focus**, **Optical/Digital Zoom (`1.3×`)**, **Pan**, **Tilt**, **Aperture**, **Roll**, **Hardware Privacy Shutter**, **Progressive Scan**, and **Vendor Extension Unit (XU)** controls.
+- **Network WebSocket Control (`ws://`):** Quick toggle, live endpoint URL (`ws://127.0.0.1:8765` / `ws://<LAN-IP>:8765`), and one-click `Copy ws://` button.
+- **License:** the bottom of the tab shows the project license (`Released under the MIT License. Copyright © 2026 SilverFeit.`), linked to the repository `LICENSE`.
+- **Tip:** double-click any slider's label to reset it to the camera default.
 
 ### Preferences
 - **Target USB Camera:** Displays Vendor/Product ID, USB location & serial, UVC spec, **Firmware (`bcdDevice`)**, **Extension Unit count**, and **Configured ID** (`Bind Active Camera ID`, `Rescan USB Bus`, `Refresh Registers`).
+- **USB Link:** negotiated speed (`USB 3 SuperSpeed`, `USB 2.0 High-Speed`…). A USB 3 camera linked at USB 2 speed shows an orange warning in the panel.
+- **Copy Camera Report:** copies a paste-ready Markdown report (identity, descriptor units, controls, video modes) and opens the GitHub bug report form.
 - **Hardware Control, Call Fixes & Menu Bar:**
   - **Lock Hardware Values (Anti-Reset Daemon):** Re-applies drifted registers every `2.5s`.
   - **Auto-fix slow `5 fps` call streams:** Automatically upgrades sluggish `<= 10 fps` streams (e.g. WhatsApp Desktop) to `1080p @ 30 fps` MJPEG.
+  - **Global shortcuts:** `⌃⌥⌘0` turns your configuration on/off, `⌃⌥⌘1`–`⌃⌥⌘5` apply presets 1–5 from any app (no permissions needed).
   - **Floating Stream Stats HUD:** `Off`, `While in Call`, or `Always` — shows a compact non-activating floating HUD with live resolution, FPS, shutter, white balance, and call timer.
   - **Load at Start**, **Compact Menu Bar**, **Keep Panel on Top**, and **Launch at macOS Login**.
 - **Version, GitHub Updates, Homebrew & CLI:** Manual update check, GitHub Releases link, automatic update check toggle, one-click `Copy brew` button, and `Open Log` (`~/Library/Logs/WebCamController.log`).
+- **Presets Export… / Import…:** move presets between Macs as portable JSON.
 - **Recent Call Sessions:** Summarizes recent webcam sessions (apps, stream mode, duration) with **Clear History**.
 
 ## Command-Line Interface (`webcamctl`)
@@ -94,9 +106,29 @@ Run `webcamctl --help` for full usage. Key commands:
 | `webcamctl set <key=val>...` | Write one or more registers (`shutter=1/60`, `kelvin=4500`, `brightness=+8`, `focus=auto`). Auto-unlocks Manual mode when setting manual values. |
 | `webcamctl reset <control...|all>` | Restore individual controls or all hardware registers to factory `GET_DEF`. |
 | `webcamctl stream [res] [fps] [codec]` | Inspect or negotiate video stream mode (e.g. `webcamctl stream 2k 30 mjpeg`, `webcamctl stream reset`). |
-| `webcamctl preset list\|apply\|save\|delete` | Manage saved per-camera presets from scripts, Shortcuts, Raycast, or Stream Deck. |
+| `webcamctl preset list\|apply\|save\|delete\|export\|import` | Manage saved per-camera presets, and export / import them as JSON. |
+| `webcamctl config [on\|off\|toggle\|status]` | Turn your saved configuration off (factory defaults) or back on (re-applies your values). |
+| `webcamctl look "<phrase>"` | Apply natural-language look adjustments (`"warmer, more contrast"`, `"black and white"`, `"natural"`). |
+| `webcamctl reset-view` · `reset-image` | Reset only PTZ framing (`Zoom`, `Pan`, `Tilt`) or only image controls to factory defaults. |
+| `webcamctl ws [status\|on\|off\|port <n>\|lan <on\|off>]` | Configure or inspect the built-in WebSocket remote network control server (`ws://`). |
+| `webcamctl report` | Print a paste-ready Markdown camera report for GitHub issues. |
 | `webcamctl lock [status\|on\|off]` | Query or toggle the Anti-Reset Hardware Lock daemon. |
 | `webcamctl who [--json]` | Show whether the webcam is currently streaming and which macOS apps are using it (zero TCC permissions). |
 | `webcamctl sessions [--clear]` | View or clear recent call session history. |
 | `webcamctl check-update [--json]` | Query GitHub Releases for newer versions and print upgrade instructions. |
 | `webcamctl version` | Print installed version and repository URL. |
+
+## URL Scheme (`webcamcontroller://`)
+
+Shortcuts ("Open URL"), Raycast, Stream Deck and the Terminal can control the app without opening a window:
+
+| URL | Action |
+| :--- | :--- |
+| `webcamcontroller://preset/Meeting` | Apply a preset by name, number (`preset/2`) or `preset/default`. |
+| `webcamcontroller://config/off` · `on` · `toggle` | Turn your saved configuration off / on. |
+| `webcamcontroller://lock/on` · `off` | Anti-Reset Hardware Lock. |
+| `webcamcontroller://reset` | Restore factory defaults. |
+| `webcamcontroller://camera/Brio` | Select a camera. |
+| `webcamcontroller://set?brightness=+8&shutter=1/60` | Write controls (same tokens as `webcamctl set`). |
+
+Add `?camera=Name` to any link to pick the camera first, e.g. `open -g "webcamcontroller://preset/Meeting"`.

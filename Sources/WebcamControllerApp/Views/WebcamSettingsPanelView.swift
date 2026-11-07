@@ -69,6 +69,14 @@ public struct WebcamSettingsPanelView: View {
                 .help("Rescan USB bus and read live UVC registers")
             }
 
+            if let warning = manager.selectedCamera?.identity.usbLinkWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // Segmented Tab Control: [ Basic | Advanced | Preferences ]
             Picker("", selection: $manager.activePanelTab) {
                 ForEach(SettingsPanelTab.allCases) { tab in
@@ -87,7 +95,7 @@ public struct WebcamSettingsPanelView: View {
                         case .basic:
                             BasicTabView(camera: camera, compact: false, hideUnsupported: false)
                         case .advanced:
-                            AdvancedTabView(camera: camera)
+                            AdvancedTabView(camera: camera, manager: manager)
                         case .preferences:
                             PreferencesTabView(manager: manager, onWindowLevelChanged: onWindowLevelChanged)
                         }

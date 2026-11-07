@@ -243,6 +243,11 @@ public struct PanelSliderRow<LeftIcon: View, RightIcon: View>: View {
                     .foregroundStyle(state.isSupported ? Color.primary : Color.secondary.opacity(0.4))
                     .frame(width: labelWidth, alignment: .trailing)
                     .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        if isInteractive { onChange(state.defaultValue) }
+                    }
+                    .help(isInteractive ? "Double-click to reset \(label) to default" : "")
             }
 
             leftIcon

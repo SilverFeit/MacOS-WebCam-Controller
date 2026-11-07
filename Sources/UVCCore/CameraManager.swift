@@ -70,6 +70,45 @@ public final class CameraManager: ObservableObject {
     @Published public var keepPanelOnTop: Bool {
         didSet { defaults.set(keepPanelOnTop, forKey: Keys.keepPanelOnTop) }
     }
+    /// Master switch for "my configuration". Off = the camera runs on its factory defaults while your saved values
+    /// are kept aside (and the lock / startup presets stand down); On = they are re-applied.
+    @Published public private(set) var isConfigurationEnabled: Bool {
+        didSet {
+            defaults.set(isConfigurationEnabled, forKey: Keys.isConfigurationEnabled)
+            updateLockTimer()
+        }
+    }
+    @Published public var globalHotkeysEnabled: Bool {
+        didSet { defaults.set(globalHotkeysEnabled, forKey: Keys.globalHotkeysEnabled) }
+    }
+    @Published public var webSocketEnabled: Bool {
+        didSet {
+            defaults.set(webSocketEnabled, forKey: Keys.webSocketEnabled)
+            syncWebSocketServer()
+        }
+    }
+    @Published public var webSocketPort: Int {
+        didSet {
+            let clamped = min(max(webSocketPort, 1024), 65535)
+            if webSocketPort != clamped {
+                webSocketPort = clamped
+                return
+            }
+            defaults.set(webSocketPort, forKey: Keys.webSocketPort)
+            if webSocketEnabled { syncWebSocketServer() }
+        }
+    }
+    @Published public var webSocketAllowLAN: Bool {
+        didSet {
+            defaults.set(webSocketAllowLAN, forKey: Keys.webSocketAllowLAN)
+            if webSocketEnabled { syncWebSocketServer() }
+        }
+    }
+    @Published public var webSocketAuthToken: String {
+        didSet {
+            defaults.set(webSocketAuthToken, forKey: Keys.webSocketAuthToken)
+        }
+    }
     @Published public var fixSlowCallModes: Bool {
         didSet { defaults.set(fixSlowCallModes, forKey: Keys.fixSlowCallModes) }
     }
@@ -92,8 +131,9 @@ public final class CameraManager: ObservableObject {
     }
     @Published public var isOverlayDismissedForSession: Bool = false
 
-    // Live Call & Update Telemetry
+    // Live Call, Update & WebSocket Network Control
     public let updateChecker: UpdateChecker
+    public let webSocketServer: WebSocketControlServer
     @Published public private(set) var isSelectedCameraInCall: Bool = false
     @Published public private(set) var activeCallApps: [ActiveCameraClientApp] = []
     @Published public private(set) var callStartedAt: Date? = nil
@@ -115,6 +155,7 @@ public final class CameraManager: ObservableObject {
     private var updateTimer: Timer?
     private var deviceCancellable: AnyCancellable?
     private var updateCheckerCancellable: AnyCancellable?
+    private var webSocketServerCancellable: AnyCancellable?
     private var distributedSyncObserver: NSObjectProtocol?
     private var appliedStartupForRuntimeIDs: Set<String> = []
     private var slowModeFixAttemptsInSession: Int = 0
@@ -128,6 +169,13 @@ public final class CameraManager: ObservableObject {
         static let compactMenuBarMode = "com.webcamcontroller.compactMenuBarMode"
         static let keepPanelOnTop = "com.webcamcontroller.keepPanelOnTop"
         static let fixSlowCallModes = "com.webcamcontroller.fixSlowCallModes"
+        static let isConfigurationEnabled = "com.webcamcontroller.isConfigurationEnabled"
+        static let globalHotkeysEnabled = "com.webcamcontroller.globalHotkeysEnabled"
+        static let webSocketEnabled = "com.webcamcontroller.webSocketEnabled"
+        static let webSocketPort = "com.webcamcontroller.webSocketPort"
+        static let webSocketAllowLAN = "com.webcamcontroller.webSocketAllowLAN"
+        static let webSocketAuthToken = "com.webcamcontroller.webSocketAuthToken"
+        static let configBypassSnapshots = "com.webcamcontroller.configBypassSnapshots.v1"
         static let autoCheckUpdates = "com.webcamcontroller.autoCheckUpdates"
         static let streamOverlayMode = "com.webcamcontroller.streamOverlayMode"
         static let isOverlayCollapsed = "com.webcamcontroller.isOverlayCollapsed"
@@ -176,6 +224,7 @@ public final class CameraManager: ObservableObject {
         self.defaults = resolvedDefaults
         self.presetStore = PresetStore(defaults: resolvedDefaults)
         self.updateChecker = UpdateChecker()
+        self.webSocketServer = WebSocketControlServer()
         self.backgroundMonitorsEnabled = enableBackgroundMonitors ?? enableHotplugWatcher
 
         self.configuredCameraID = resolvedDefaults.string(forKey: Keys.configuredCameraID) ?? ""
@@ -183,6 +232,13 @@ public final class CameraManager: ObservableObject {
         self.autoLoadPresetOnConnect = resolvedDefaults.object(forKey: Keys.autoLoadPresetOnConnect) as? Bool ?? true
         self.compactMenuBarMode = resolvedDefaults.object(forKey: Keys.compactMenuBarMode) as? Bool ?? true
         self.keepPanelOnTop = resolvedDefaults.object(forKey: Keys.keepPanelOnTop) as? Bool ?? false
+        self.isConfigurationEnabled = resolvedDefaults.object(forKey: Keys.isConfigurationEnabled) as? Bool ?? true
+        self.globalHotkeysEnabled = resolvedDefaults.object(forKey: Keys.globalHotkeysEnabled) as? Bool ?? false
+        self.webSocketEnabled = resolvedDefaults.object(forKey: Keys.webSocketEnabled) as? Bool ?? false
+        let storedPort = resolvedDefaults.object(forKey: Keys.webSocketPort) as? Int ?? WebSocketControlServer.defaultPort
+        self.webSocketPort = min(max(storedPort, 1024), 65535)
+        self.webSocketAllowLAN = resolvedDefaults.object(forKey: Keys.webSocketAllowLAN) as? Bool ?? false
+        self.webSocketAuthToken = resolvedDefaults.string(forKey: Keys.webSocketAuthToken) ?? ""
         self.fixSlowCallModes = resolvedDefaults.object(forKey: Keys.fixSlowCallModes) as? Bool ?? true
         self.autoCheckUpdates = resolvedDefaults.object(forKey: Keys.autoCheckUpdates) as? Bool ?? true
         self.streamOverlayMode = StreamOverlayMode(rawValue: resolvedDefaults.string(forKey: Keys.streamOverlayMode) ?? "") ?? .off
@@ -193,7 +249,12 @@ public final class CameraManager: ObservableObject {
             self.recentCallSessions = decoded
         }
 
+        self.webSocketServer.attach(manager: self)
+
         updateCheckerCancellable = updateChecker.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        webSocketServerCancellable = webSocketServer.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
 
@@ -205,11 +266,28 @@ public final class CameraManager: ObservableObject {
         if backgroundMonitorsEnabled {
             startCallAndExternalSyncMonitoring()
             startAutomaticUpdateChecking()
+            syncWebSocketServer()
         }
         updateLockTimer()
     }
 
+    public func syncWebSocketServer() {
+        guard backgroundMonitorsEnabled else { return }
+        if webSocketEnabled {
+            webSocketServer.start(
+                port: webSocketPort,
+                allowLAN: webSocketAllowLAN,
+                authToken: webSocketAuthToken
+            )
+            let url = webSocketServer.displayEndpointURL(allowLAN: webSocketAllowLAN)
+            statusMessage = "WebSocket active on \(url)"
+        } else {
+            webSocketServer.stop()
+        }
+    }
+
     public func shutdown() {
+        webSocketServer.stop()
         lockTimer?.invalidate()
         lockTimer = nil
         callMonitorTimer?.invalidate()
@@ -285,7 +363,7 @@ public final class CameraManager: ObservableObject {
         }
 
         // Apply startup presets to newly connected cameras if enabled
-        if autoLoadPresetOnConnect {
+        if autoLoadPresetOnConnect && isConfigurationEnabled {
             for cam in cameras where !appliedStartupForRuntimeIDs.contains(cam.identity.runtimeID) {
                 appliedStartupForRuntimeIDs.insert(cam.identity.runtimeID)
                 if let startup = presetStore.startupPreset(for: cam.identity) {
@@ -308,6 +386,58 @@ public final class CameraManager: ObservableObject {
         }
     }
 
+    // MARK: - Configuration On / Off
+
+    private func loadBypassSnapshots() -> [String: CameraSettingsSnapshot] {
+        guard let data = defaults.data(forKey: Keys.configBypassSnapshots) else { return [:] }
+        return (try? JSONDecoder().decode([String: CameraSettingsSnapshot].self, from: data)) ?? [:]
+    }
+
+    private func saveBypassSnapshots(_ snapshots: [String: CameraSettingsSnapshot]) {
+        if snapshots.isEmpty {
+            defaults.removeObject(forKey: Keys.configBypassSnapshots)
+        } else if let data = try? JSONEncoder().encode(snapshots) {
+            defaults.set(data, forKey: Keys.configBypassSnapshots)
+        }
+    }
+
+    /// Turns "my configuration" off (every attached camera falls back to its factory defaults while the current
+    /// values are remembered) or back on (the remembered values are re-applied). Returns the new state.
+    @discardableResult
+    public func setConfigurationEnabled(_ enabled: Bool) -> Bool {
+        guard enabled != isConfigurationEnabled else { return isConfigurationEnabled }
+
+        if enabled {
+            isConfigurationEnabled = true
+            let saved = loadBypassSnapshots()
+            var reapplied = 0
+            for cam in cameras {
+                if let snapshot = saved[cam.identity.persistentID] ?? saved[cam.identity.modelKey] {
+                    cam.applySnapshot(snapshot)
+                    reapplied += 1
+                }
+            }
+            saveBypassSnapshots([:])
+            statusMessage = reapplied > 0
+                ? "Configuration ON — your settings were re-applied"
+                : "Configuration ON"
+            DiagnosticsLogger.note("Configuration turned ON (\(reapplied) camera(s) re-applied)")
+        } else {
+            var snapshots = loadBypassSnapshots()
+            for cam in cameras {
+                snapshots[cam.identity.persistentID] = cam.captureSnapshot()
+            }
+            saveBypassSnapshots(snapshots)
+            isConfigurationEnabled = false
+            for cam in cameras {
+                cam.resetAllToHardwareDefaults()
+            }
+            statusMessage = "Configuration OFF — camera is on its factory defaults"
+            DiagnosticsLogger.note("Configuration turned OFF (\(cameras.count) camera(s) reset to factory defaults)")
+        }
+        return isConfigurationEnabled
+    }
+
     public func pinCurrentCameraAsConfiguredDefault() {
         guard let cam = selectedCamera else { return }
         configuredCameraID = cam.identity.persistentID
@@ -323,6 +453,8 @@ public final class CameraManager: ObservableObject {
         activeCallApps = [ActiveCameraClientApp(name: "Zoom", bundleID: "us.zoom.xos", evidence: .microphoneInput)]
         callStartedAt = Date().addingTimeInterval(-254)
         callElapsedSeconds = 254
+        webSocketEnabled = true
+        webSocketAllowLAN = true
         bindSelectedCamera()
         statusMessage = "Direct Endpoint 0 UVC active · 0% video CPU overhead"
     }
@@ -341,7 +473,11 @@ public final class CameraManager: ObservableObject {
         }
 
         deviceCancellable = cam.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
+            guard let self else { return }
+            self.objectWillChange.send()
+            Task { @MainActor [weak self] in
+                self?.webSocketServer.broadcastStateSnapshot(event: "state_changed")
+            }
         }
 
         reloadPresetsForSelectedCamera()
@@ -451,6 +587,11 @@ public final class CameraManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isHardwareLockEnabled = self.defaults.object(forKey: Keys.isHardwareLockEnabled) as? Bool ?? self.isHardwareLockEnabled
+                self.isConfigurationEnabled = self.defaults.object(forKey: Keys.isConfigurationEnabled) as? Bool ?? self.isConfigurationEnabled
+                self.webSocketPort = self.defaults.object(forKey: Keys.webSocketPort) as? Int ?? self.webSocketPort
+                self.webSocketAllowLAN = self.defaults.object(forKey: Keys.webSocketAllowLAN) as? Bool ?? self.webSocketAllowLAN
+                self.webSocketAuthToken = self.defaults.string(forKey: Keys.webSocketAuthToken) ?? self.webSocketAuthToken
+                self.webSocketEnabled = self.defaults.object(forKey: Keys.webSocketEnabled) as? Bool ?? self.webSocketEnabled
                 self.selectedCamera?.refreshAllFromHardware(syncLockedTarget: true)
                 self.reloadPresetsForSelectedCamera()
                 self.statusMessage = "Synced live changes from webcamctl CLI"
@@ -589,10 +730,10 @@ public final class CameraManager: ObservableObject {
     private func updateLockTimer() {
         lockTimer?.invalidate()
         lockTimer = nil
-        guard isHardwareLockEnabled else { return }
+        guard isHardwareLockEnabled, isConfigurationEnabled else { return }
         lockTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.isHardwareLockEnabled, let cam = self.selectedCamera else { return }
+                guard let self, self.isHardwareLockEnabled, self.isConfigurationEnabled, let cam = self.selectedCamera else { return }
                 let restored = cam.enforceLockedSnapshotIfDrifted()
                 if restored > 0 {
                     self.statusMessage = "Hardware Lock re-applied \(restored) value(s)"

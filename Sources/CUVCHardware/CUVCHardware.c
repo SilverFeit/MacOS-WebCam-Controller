@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <time.h>
+#include <unistd.h>
 #include <libkern/OSByteOrder.h>
 #include <IOKit/IOMessage.h>
 #include <IOKit/IOCFPlugIn.h>
@@ -185,6 +188,15 @@ static bool inspect_uvc_service(
     }
     if (read_cfnumber_int64(usbDeviceService, CFSTR("bcdDevice"), &val)) {
         outInfo->firmwareBCD = (uint16_t)(val & 0xFFFF);
+    }
+    if (read_cfnumber_int64(usbDeviceService, CFSTR("bcdUSB"), &val)) {
+        outInfo->usbSpecBCD = (uint16_t)(val & 0xFFFF);
+    }
+    // "Device Speed" follows IOKit's USBDeviceSpeed numbering: 0 low, 1 full, 2 high, 3 super, 4 super+.
+    if (read_cfnumber_int64(usbDeviceService, CFSTR("Device Speed"), &val)) {
+        outInfo->usbSpeed = (uint8_t)(val & 0xFF);
+    } else if (read_cfnumber_int64(usbDeviceService, CFSTR("UsbLinkSpeed"), &val)) {
+        outInfo->usbSpeed = val >= 5000000000LL ? 3 : (val >= 480000000LL ? 2 : 1);
     }
 
     if (!read_cfstring_property(usbDeviceService, CFSTR("USB Product Name"), outInfo->productName, sizeof(outInfo->productName)) &&
@@ -827,24 +839,75 @@ bool cuvc_negotiate_stream_state(
 
 // MARK: - VideoControl Endpoint 0 Requests
 
+// Every control request of every camera goes through one lock with a minimum gap between transfers.
+// Hammering Endpoint 0 (slider drags, lock re-assertion, CLI) can stall some UVC firmwares.
+static pthread_mutex_t g_ep0_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t g_ep0_last_ns = 0;
+#define CUVC_EP0_MIN_GAP_NS 4000000ULL
+
+static void ep0_throttle_locked(void) {
+    uint64_t now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    if (g_ep0_last_ns != 0 && now > g_ep0_last_ns && now - g_ep0_last_ns < CUVC_EP0_MIN_GAP_NS) {
+        usleep((useconds_t)((CUVC_EP0_MIN_GAP_NS - (now - g_ep0_last_ns)) / 1000ULL));
+    }
+}
+
 static bool perform_ep0_request(CUVCDeviceHandle *handle, IOUSBDevRequest *req) {
     if (!handle || !handle->controlInterface) return false;
 
+    pthread_mutex_lock(&g_ep0_lock);
+    ep0_throttle_locked();
+
+    bool ok = false;
     IOReturn kr = (*handle->controlInterface)->ControlRequest(handle->controlInterface, 0, req);
     if (kr == kIOReturnSuccess) {
         handle->lastError = 0;
-        return true;
-    }
-
-    if (handle->deviceInterface) {
+        ok = true;
+    } else if (handle->deviceInterface) {
         req->wLenDone = 0;
         kr = (*handle->deviceInterface)->DeviceRequest(handle->deviceInterface, req);
         if (kr == kIOReturnSuccess) {
             handle->lastError = 0;
+            ok = true;
+        }
+    }
+    if (!ok) handle->lastError = (int32_t)kr;
+
+    g_ep0_last_ns = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    pthread_mutex_unlock(&g_ep0_lock);
+    return ok;
+}
+
+// Vendor Extension Unit selectors that must never be written (firmware / USB-mode switch paths).
+// GUIDs are stored as they appear in the UVC descriptor (first three fields little-endian).
+typedef struct {
+    uint8_t guid[16];
+    uint8_t selector;
+} CUVCForbiddenSelector;
+
+static const CUVCForbiddenSelector kForbiddenSelectors[] = {
+    // Insta360 Link family {faf1672d-b71b-4793-8c91-7b1c9b7f95f8}, selector 17: USB mode switch / firmware path
+    { { 0x2d, 0x67, 0xf1, 0xfa, 0x1b, 0xb7, 0x93, 0x47, 0x8c, 0x91, 0x7b, 0x1c, 0x9b, 0x7f, 0x95, 0xf8 }, 17 },
+};
+
+bool cuvc_selector_is_forbidden(const uint8_t guidBytes[16], uint8_t selector) {
+    if (!guidBytes) return false;
+    for (size_t i = 0; i < sizeof(kForbiddenSelectors) / sizeof(kForbiddenSelectors[0]); i++) {
+        if (kForbiddenSelectors[i].selector == selector &&
+            memcmp(kForbiddenSelectors[i].guid, guidBytes, 16) == 0) {
             return true;
         }
     }
-    handle->lastError = (int32_t)kr;
+    return false;
+}
+
+static bool handle_write_is_forbidden(const CUVCDeviceHandle *handle, uint8_t unitId, uint8_t selector) {
+    for (uint8_t i = 0; i < handle->info.extensionUnitCount && i < CUVC_MAX_EXTENSION_UNITS; i++) {
+        const CUVCExtensionUnitInfo *xu = &handle->info.extensionUnits[i];
+        if (xu->unitId == unitId && cuvc_selector_is_forbidden(xu->guidBytes, selector)) {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -887,6 +950,10 @@ bool cuvc_set_control_bytes(
     uint16_t length
 ) {
     if (!handle || !inBuffer || length == 0) return false;
+    if (handle_write_is_forbidden(handle, unitId, selector)) {
+        handle->lastError = (int32_t)kIOReturnNotPermitted;
+        return false;
+    }
 
     uint8_t tempBuf[64];
     if (length > sizeof(tempBuf)) return false;

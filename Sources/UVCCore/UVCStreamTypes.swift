@@ -326,6 +326,23 @@ public enum UVCStreamValidator {
         return UVCStreamSelection(mode: defMode, option: opt)
     }
 
+    /// Highest resolution mode with `>= minFPS` (16:9 aspect ratio preferred) and the highest frame rate at that size (e.g. 60 over 30).
+    public static func naturalSelection(in modes: [UVCStreamResolutionMode], minFPS: Int = 30) -> UVCStreamSelection? {
+        guard let primaryCodec = availableCodecs(in: modes).first else { return nil }
+        let codecModes = modes.filter { $0.codec == primaryCodec }
+        let qualifying = codecModes.filter { $0.maxFPS >= minFPS }
+        let candidates = qualifying.isEmpty ? codecModes : qualifying
+        let wide = candidates.filter { abs(Double($0.width) / Double(max($0.height, 1)) - 16.0 / 9.0) < 0.02 }
+        let pool = wide.isEmpty ? candidates : wide
+        guard let bestMode = pool.max(by: { lhs, rhs in
+            if lhs.pixelCount != rhs.pixelCount { return lhs.pixelCount < rhs.pixelCount }
+            return lhs.maxFPS < rhs.maxFPS
+        }), let highestFPSOption = bestMode.supportedFPS.last else {
+            return nil
+        }
+        return UVCStreamSelection(mode: bestMode, option: highestFPSOption)
+    }
+
     /// Maps a live `CUVCActiveStreamState` read from USB `VS_COMMIT_CONTROL` / `VS_PROBE_CONTROL` into a validated selection.
     public static func selectionFromHardwareState(
         _ state: CUVCActiveStreamState,

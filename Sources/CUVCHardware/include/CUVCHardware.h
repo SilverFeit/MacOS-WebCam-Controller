@@ -137,6 +137,8 @@ typedef struct {
     char     productName[256];
     char     vendorName[256];
     char     serialNumber[128];
+    uint16_t usbSpecBCD;   // bcdUSB (0x0200 = USB 2.0, 0x0300 = USB 3.0)
+    uint8_t  usbSpeed;     // IOKit USBDeviceSpeed: 0 low, 1 full, 2 high, 3 super, 4 super+ (0 = unknown)
 } CUVCDeviceInfo;
 
 /// Opaque handle to an open UVC control channel (Endpoint 0, non-exclusive)
@@ -256,6 +258,10 @@ bool cuvc_set_pantilt(
     int32_t pan,
     int32_t tilt
 );
+
+/// True when writing `selector` on the extension unit with `guidBytes` (descriptor byte order) is blocked
+/// because it is a known firmware / USB-mode-switch selector. `cuvc_set_control_bytes` enforces this.
+bool cuvc_selector_is_forbidden(const uint8_t guidBytes[16], uint8_t selector);
 
 /// Start watching USB device plug/unplug events on the main CFRunLoop.
 CUVCHotplugWatcher *cuvc_start_hotplug_watcher(CUVCHotplugCallback callback, void *context);

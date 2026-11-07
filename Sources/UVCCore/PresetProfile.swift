@@ -220,4 +220,57 @@ public final class PresetStore: @unchecked Sendable {
     public func startupPreset(for identity: CameraIdentity) -> CameraPreset? {
         presets(for: identity).first(where: { $0.loadAtStart })
     }
+
+    // MARK: - Export / Import
+
+    private struct PresetBundle: Codable {
+        var webcamcontroller: Int
+        var presets: [CameraPreset]
+    }
+
+    /// Pretty JSON `{ "webcamcontroller": 1, "presets": [...] }`. Pass `identity` to export one camera model only.
+    public func exportData(for identity: CameraIdentity? = nil) throws -> Data {
+        let all = loadAll().filter { preset in
+            guard let identity else { return true }
+            return preset.cameraModelKey.caseInsensitiveCompare(identity.modelKey) == .orderedSame
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(PresetBundle(webcamcontroller: 1, presets: all))
+    }
+
+    /// Appends the file's presets with fresh IDs. A name that already exists for the same camera model becomes
+    /// `Name 2`, `Name 3`... and `Load at Start` is never imported. Returns the number of presets added.
+    @discardableResult
+    public func importData(_ data: Data) throws -> Int {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let bundle = try decoder.decode(PresetBundle.self, from: data)
+
+        var all = loadAll()
+        for incoming in bundle.presets {
+            let base = incoming.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseName = base.isEmpty ? "Imported Preset" : base
+            let taken = Set(all.filter { $0.cameraModelKey == incoming.cameraModelKey }.map { $0.name.lowercased() })
+            var name = baseName
+            var n = 2
+            while taken.contains(name.lowercased()) {
+                name = "\(baseName) \(n)"
+                n += 1
+            }
+            all.append(CameraPreset(
+                name: name,
+                cameraModelKey: incoming.cameraModelKey,
+                cameraPersistentID: incoming.cameraPersistentID,
+                loadAtStart: false,
+                snapshot: incoming.snapshot,
+                createdAt: incoming.createdAt
+            ))
+        }
+        if !bundle.presets.isEmpty {
+            saveAll(all)
+        }
+        return bundle.presets.count
+    }
 }

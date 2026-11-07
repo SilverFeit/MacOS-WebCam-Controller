@@ -46,7 +46,7 @@ On Windows, operating system APIs (`DirectShow` / `IAMCameraControl`) expose eve
 - **100% Hardware Real (Sin Cámaras Virtuales ni Permisos):** En Zoom, Meet, Teams, OBS, WhatsApp o FaceTime sigues eligiendo el nombre real de tu cámara USB. La app inyecta paquetes UVC (`SET_CUR`, `GET_CUR`, `GET_DEF`) por **Endpoint 0** mediante `IOKit` sin pedir permisos de Cámara/Micrófono y con `0%` de carga de recodificación de video.
 - **Control Total + Obturación Fotográfica (`1/60s`):** Exposición manual, velocidad de obturación en formato fotográfico (`1/60s`, `1/50s`), ganancia/ISO, temperatura en Kelvin, brillo, contraste, matiz, saturación, nitidez, gamma, filtro anti-parpadeo (`50 Hz / 60 Hz`) con protección contra bloqueos UVC `< 1.5`, contraluz, enfoque y PTZ (`1.3×` Zoom, Pan, Tilt).
 - **Resoluciones (2K / 4K / 1080p), FPS Validados y Auto-Fix de Llamadas a `5 fps`:** Valida combinaciones reales `(Formato, Resolución, FPS)` desde los descriptores USB y mejora automáticamente llamadas lentas (`<= 10 fps`, como WhatsApp) a `1080p @ 30 fps`.
-- **HUD Flotante, CLI `webcamctl` y Versionamiento inferior con GitHub:** Incluye HUD flotante opcional durante llamadas, control total por terminal (`webcamctl set shutter=1/60 kelvin=4500`, `webcamctl stream 2k 30`, `webcamctl who`) y barra inferior con la versión actual (`v1.1.1 · GitHub ↗`) y aviso automático cuando hay una actualización disponible en GitHub Releases.
+- **HUD Flotante, WebSocket en Red (`ws://`), CLI `webcamctl` y Menú Contextual:** Incluye servidor **WebSocket** (`ws://127.0.0.1:8765` o LAN `0.0.0.0`) para controlar la cámara por red, menú contextual al hacer doble clic o clic derecho en el icono de la barra de menús (**Turn Configuration Off/On**, **Open Advanced…**, **About**, **Quit**), pad 2D PTZ interactivo, perfiles XU de fabricante (Insta360 Link, Anker C200/C310), HUD flotante opcional durante llamadas, control total por terminal (`webcamctl set shutter=1/60 kelvin=4500`, `webcamctl look "warmer"`, `webcamctl ws on`) y barra inferior con la versión actual (`v1.2.0 · GitHub ↗`) y licencia MIT.
 
 </details>
 
@@ -75,7 +75,7 @@ On Windows, operating system APIs (`DirectShow` / `IAMCameraControl`) expose eve
 ### 1. Instant Menu Bar Control + Standalone Settings Panel + Bottom GitHub Version Bar
 - **Left-click** the webcam icon in the macOS Menu Bar to adjust primary exposure, photographic shutter (`1/60s`), color, and white-balance sliders on the fly during a call.
 - **Right-click** the Menu Bar icon (or click **Advanced…** / **Panel**) to open the full **Webcam Settings Panel** (`Basic`, `Advanced`, and `Preferences` tabs), with optional **Pin on Top** so it floats above OBS, Zoom, or Photo Booth.
-- **Live Version & Update Badge at the Bottom:** Both the Menu Bar popover and Settings Panel display your installed version (`v1.1.1 · GitHub ↗`) at the bottom. When a newer release is published on GitHub, the badge highlights as **`⬆ Update vX.Y.Z · GitHub ↗`** for one-click access to the latest release.
+- **Live Version & Update Badge at the Bottom:** Both the Menu Bar popover and Settings Panel display your installed version (`v1.2.0 · GitHub ↗`) at the bottom. When a newer release is published on GitHub, the badge highlights as **`⬆ Update vX.Y.Z · GitHub ↗`** for one-click access to the latest release.
 
 ### 2. Full Sensor, ISP & Optical Control (`Basic` & `Advanced`)
 - **Exposure & Photographic Shutter (`1/60s`):** Switch between hardware-supported `Manual`, `Auto`, `Shutter Priority`, and `Aperture Priority` modes; dial in exact physical **Exposure Time** displayed in standard shutter fractions (`1/60s`, `1/50s`, `1/30s`) and sensor **Gain**.
@@ -120,7 +120,7 @@ brew upgrade --cask macos-webcam-controller
 ### Option B — Download Prebuilt `.dmg` / `.zip`
 
 1. Go to [**GitHub Releases (`latest`)**](https://github.com/SilverFeit/MacOS-WebCam-Controller/releases/latest).
-2. Download **`MacOS-WebCam-Controller-1.1.1.dmg`** *(or `MacOS-WebCam-Controller-1.1.1.app.zip`)*.
+2. Download **`MacOS-WebCam-Controller-1.2.0.dmg`** *(or `MacOS-WebCam-Controller-1.2.0.app.zip`)*.
 3. Open the `.dmg`, drag **WebCam Controller** into **Applications**, and launch it.
 
 > [!NOTE]
@@ -178,6 +178,25 @@ webcamctl preset list
 webcamctl preset save "Studio Daylight" --load-at-start
 webcamctl preset apply "Studio Daylight"
 webcamctl lock on
+webcamctl preset export ~/webcam-presets.json
+webcamctl preset import ~/webcam-presets.json
+
+# Turn your whole saved configuration off (factory defaults) or back on (re-applies your values)
+webcamctl config off
+webcamctl config on
+
+# Natural-language / keyword look adjustment & scoped resets
+webcamctl look "warmer, more contrast"
+webcamctl reset-view
+webcamctl reset-image
+
+# Control or inspect the built-in WebSocket remote network control server (ws://)
+webcamctl ws on
+webcamctl ws lan on
+webcamctl ws status
+
+# Paste-ready Markdown report of your camera for a GitHub issue
+webcamctl report
 
 # Zero-permission active call inspection & GitHub update check
 webcamctl who
@@ -186,6 +205,62 @@ webcamctl check-update
 ```
 
 ---
+
+## Menu Bar Menu, URL Scheme & Global Shortcuts
+
+**Right-click or double-click the menu bar icon** for a context menu:
+
+1. **Turn Configuration Off / On** — off parks your saved values and returns the camera to its factory defaults (the Anti-Reset Lock and startup presets stand down); on re-applies them.
+2. **Open Advanced…**
+3. **About WebCam Controller** — version, license and GitHub links.
+4. **Quit WebCam Controller**
+
+The `Advanced` tab ends with the project license line: *Released under the [MIT License](https://github.com/SilverFeit/MacOS-WebCam-Controller/blob/main/LICENSE). Copyright © 2026 [SilverFeit](https://github.com/SilverFeit).*
+
+### `webcamcontroller://` URL scheme
+
+Shortcuts ("Open URL"), Raycast, Stream Deck and the Terminal can drive the app without opening any window:
+
+| URL | Action |
+| --- | --- |
+| `webcamcontroller://preset/Meeting` | Apply a saved preset by name, by number (`preset/2`) or `preset/default` |
+| `webcamcontroller://config/off` · `on` · `toggle` | Turn your saved configuration off / on |
+| `webcamcontroller://lock/on` · `off` | Anti-Reset Hardware Lock |
+| `webcamcontroller://reset` | Restore factory defaults (`GET_DEF`) |
+| `webcamcontroller://camera/Brio` | Select a camera by index, ID, serial or name |
+| `webcamcontroller://set?brightness=+8&shutter=1/60` | Write controls (same tokens as `webcamctl set`) |
+
+Add `?camera=Name` to any link to choose the camera first.
+
+```bash
+open -g "webcamcontroller://preset/Meeting"
+```
+
+### Global shortcuts (optional, no permissions)
+
+Enable **Global shortcuts** in `Preferences`: `⌃⌥⌘0` turns your configuration on/off and `⌃⌥⌘1`–`⌃⌥⌘5` apply presets 1–5, from any app.
+
+### Network WebSocket Remote Control (`ws://host:port`)
+
+Enable **WebSocket Server for Remote Camera Control** in `Preferences` (or from the quick card in `Advanced`) to control your USB webcam over `ws://127.0.0.1:8765` or across your local network (`Allow LAN access 0.0.0.0` → `ws://<LAN-IP>:8765`) with optional token authentication. Connected clients receive live `state_changed` JSON broadcasts and can send either JSON actions or plain-text CLI commands:
+
+```json
+{"action": "set", "controls": {"brightness": 12, "white_balance": 4500, "zoom": 140}}
+{"action": "stream", "spec": "2560x1440@30"}
+{"action": "preset", "name": "Studio Daylight"}
+{"action": "config", "state": "toggle"}
+{"action": "look", "phrase": "warmer, more contrast"}
+```
+
+### Camera report, 2D PTZ pad, vendor XU profiles, presets export/import & USB link check
+
+- **Interactive 2D PTZ Framing Pad (`Advanced`)**: Drag the 16:9 viewport box to pan and tilt simultaneously over USB Endpoint 0, or double-click to reset view (`Zoom`, `Pan`, `Tilt`).
+- **Vendor Extension Unit (XU) Profiles**: Built-in support for Insta360 Link series, Anker PowerConf C200, and AnkerWork C310 vendor controls (HDR, Field of View `65°`/`78°`/`95°`, EV compensation, Face Auto-Focus/Exposure, AI Mic Noise Reduction) plus user JSON profiles in `~/Library/Application Support/WebCamController/Profiles/`.
+- `Preferences → Copy Camera Report` (or `webcamctl report`) copies your camera's identity, descriptor units, supported controls and video modes and opens a GitHub issue to paste it into.
+- `Preferences → Presets: Export… / Import…` move presets between Macs as JSON.
+- A **USB 3 camera linked at USB 2 speed** shows a warning in the panel, since a USB 2 port, hub or cable caps resolution and frame rate.
+- Double-click a slider's label to reset it to the camera default.
+- All Endpoint 0 control transfers are serialized and rate-limited, and known firmware / USB-mode-switch extension selectors can never be written.
 
 ## How Direct USB Hardware Control Works
 
